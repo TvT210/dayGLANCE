@@ -4937,6 +4937,19 @@ const DayPlanner = () => {
       const r = await window.electronAPI.proxyFetch('GET', url, headers, null);
       return { status: r.status, ok: r.ok, statusText: r.statusText, headers: { get: () => null }, text: async () => r.body };
     }
+    // Same-origin or absolute-path URLs: no CORS, fetch directly.
+    // GitHub Pages / static hosts have no /api/calendar-proxy/ to fall through to.
+    // Kaoyan fork 改动: 让 /dayGLANCE/seed/kaoyan.ics 这类同源资源能直接被 dayglance 拉取导入。
+    let sameOrigin = false;
+    try {
+      const u = new URL(url, window.location.href);
+      sameOrigin = u.origin === window.location.origin;
+    } catch { sameOrigin = false; }
+    if (sameOrigin) {
+      const headers = { Accept: 'text/calendar, text/plain, */*' };
+      if (authValue) headers['Authorization'] = authValue;
+      return fetch(url, { headers });
+    }
     const proxyHeaders = {};
     if (authValue) proxyHeaders['X-Calendar-Auth'] = authValue;
     return fetch(`/api/calendar-proxy/?url=${url}`, { headers: proxyHeaders });
