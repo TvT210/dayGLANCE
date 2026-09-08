@@ -141,6 +141,9 @@ export default defineConfig({
     __BUILD_TIMESTAMP__: JSON.stringify(new Date().toISOString()),
     __APP_VERSION__: JSON.stringify(pkg.version),
   },
+  // 考研 fork 部署到 https://tvt210.github.io/dayGLANCE/
+  // 把资源 base 设为 /dayGLANCE/，否则 assets / sw.js 全部 404。
+  base: '/dayGLANCE/',
   server: {
     port: 5174,
   },
@@ -161,34 +164,34 @@ export default defineConfig({
         maximumFileSizeToCacheInBytes: 4 * 1024 * 1024, // 4 MiB — the main chunk crossed 3 MiB in 2026-08
       },
       manifest: {
-        name: 'dayGLANCE',
-        short_name: 'dayGLANCE',
-        description: 'A beautiful time-blocking day planner with task management',
-        theme_color: '#ffffff',
-        background_color: '#ffffff',
+        name: '考研日历 · 邱松鑫',
+        short_name: '考研日历',
+        description: '2027 考研专用日历 · AI 对话 · 增量同步 · PWA',
+        theme_color: '#00695c',
+        background_color: '#f5f7f5',
         display: 'standalone',
         orientation: 'any',
         icons: [
           {
-            src: '/icon-192.png',
+            src: '/dayGLANCE/icon-192.png',
             sizes: '192x192',
             type: 'image/png',
             purpose: 'any',
           },
           {
-            src: '/icon-512.png',
+            src: '/dayGLANCE/icon-512.png',
             sizes: '512x512',
             type: 'image/png',
             purpose: 'any',
           },
           {
-            src: '/icon-maskable-192.png',
+            src: '/dayGLANCE/icon-maskable-192.png',
             sizes: '192x192',
             type: 'image/png',
             purpose: 'maskable',
           },
           {
-            src: '/icon-maskable-512.png',
+            src: '/dayGLANCE/icon-maskable-512.png',
             sizes: '512x512',
             type: 'image/png',
             purpose: 'maskable',

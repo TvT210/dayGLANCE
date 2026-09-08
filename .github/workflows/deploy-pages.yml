@@ -1,0 +1,65 @@
+name: Deploy to GitHub Pages
+
+# Build the PWA on every push to main and deploy the static dist/ output
+# to GitHub Pages. The fork of krelltunez/dayglance already has CI gating
+# on lint/audit/test in ci.yml, so this workflow intentionally only
+# builds + uploads + deploys. Keeps Pages deploys simple and predictable.
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+# Don't run while another deploy is in flight, and cancel superseded
+# runs when a new commit lands on main.
+concurrency:
+  group: pages
+  cancel-in-progress: true
+
+jobs:
+  build:
+    name: Build PWA
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci --no-audit --no-fund
+
+      - name: Build
+        # `--base=/dayGLANCE/` keeps the asset URLs compatible with the
+        # GitHub Pages user-site path /dayGLANCE/. vite.config.js already
+        # hard-codes this for the fork, so it works out of the box.
+        run: npm run build
+
+      - name: Configure Pages
+        uses: actions/configure-pages@v5
+
+      - name: Upload artifact
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: dist
+
+  deploy:
+    name: Deploy to GitHub Pages
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - name: Deploy to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v4
