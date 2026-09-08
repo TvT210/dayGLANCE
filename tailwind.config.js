@@ -13,8 +13,12 @@ export default {
         brand: ['Lora', 'Georgia', 'Cambria', 'Times New Roman', 'serif'],
       },
       colors: {
-        // dayGLANCE brand orange (the "GLANCE" in the wordmark).
-        brand: '#fe8b00',
+        // 考研蓝绿主题 (Material Design 3 teal 700) — 替代原 dayGLANCE orange
+        brand: '#00695c',
+        // MD3 辅助色
+        'brand-light': '#439889',
+        'brand-dark': '#003d33',
+        'brand-bg': '#e0f2f1',
       },
     },
   },

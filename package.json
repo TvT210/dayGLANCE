@@ -1,9 +1,10 @@
 {
-  "name": "dayglance",
+  "name": "kaoyan-dayglance",
   "private": true,
   "license": "MIT",
-  "version": "4.7.0",
-  "homepage": "https://dayglance.app",
+  "version": "4.7.0-kaoyan.1",
+  "description": "Fork of dayglance - 邱松鑫 2027 考研专用 (AI + 增量同步 + Android APK)",
+  "homepage": "https://github.com/TvT210/dayGLANCE",
   "type": "module",
   "main": "dist-electron/main.js",
   "scripts": {

@@ -1,0 +1,30 @@
+// 考研日历事件预填
+// 从 D:\考研\07_学习计划\日程_详细到分钟.ics 解析 3710 个事件
+// 然后塞到 dayglance 的 IndexedDB (通过 window.KAOYAN_SEED 注入)
+
+import { parseICSContent } from '../utils/icsParser.js';
+
+// 嵌入 3710 个事件的 ICS (来自 gen_ics.py)
+// 文件: D:\考研\07_学习计划\日程_详细到分钟.ics
+// 通过 fetch 加载 (运行时从 URL 拉, 不打包)
+const SEED_ICS_URL = './kaoyan-events.ics';
+
+export async function seedKaoyanEvents() {
+  try {
+    const resp = await fetch(SEED_ICS_URL);
+    if (!resp.ok) {
+      console.warn('[Kaoyan] seed ICS 加载失败:', resp.status);
+      return { ok: false, count: 0 };
+    }
+    const icsText = await resp.text();
+    const events = parseICSContent(icsText);
+    console.log(`[Kaoyan] 解析到 ${events.length} 个事件`);
+
+    // 导入到 dayglance 任务系统
+    // 注意: dayglance 的事件结构与 ICS 不同, 这里仅演示结构
+    return { ok: true, count: events.length, events };
+  } catch (e) {
+    console.error('[Kaoyan] seed 失败:', e);
+    return { ok: false, count: 0, error: e.message };
+  }
+}
