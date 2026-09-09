@@ -1,43 +1,49 @@
 // 考研日历 PWA · 首次启动引导脚本
-// 流程:
-//   1. 如果 localStorage 'day-planner-seed-v1' 已标记 → 跳过
-//   2. 如果用户已有日历任务 ('day-planner-tasks' 非空) → 只标记一次，不再覆盖
-//   3. 否则 → 把 taskCalendarUrl 指向 /dayGLANCE/seed/kaoyan.ics，dayglance 自己 fetch & import
-//   4. 标记完成，避免重复触发
+// 注册 10 个 calendar, 每个学科独立颜色, 全部从同源 PWA 静态资源 fetch
+// 标记 'day-planner-seed-v2' 避免重复触发 (升级到学科拆分版)
 //
-// 这个脚本必须在 dayglance 主 JS 之前执行（已通过 index.html head 注入）
+// 必须在 dayglance 主 JS 之前执行 (已通过 index.html head 注入)
 
 (function bootstrapKaoyanSeed() {
   try {
-    var SEED_FLAG = 'day-planner-seed-v1';
+    var SEED_FLAG = 'day-planner-seed-v2';
     if (localStorage.getItem(SEED_FLAG)) {
       return; // 已经引导过
     }
 
     var existingTasks = localStorage.getItem('day-planner-tasks');
     if (existingTasks && existingTasks !== '[]' && existingTasks.length > 10) {
-      // 用户已经有自己的数据，不覆盖。标记一下避免反复检查。
+      // 用户已经有自己的数据, 不覆盖
       localStorage.setItem(SEED_FLAG, 'has-existing-data');
       return;
     }
 
-    // 第一次打开 → 设置 taskCalendarUrl 指向 seed .ics
-    // dayglance 的 useCalendarSync 会自动 fetch + 解析 + 导入
-    var seedUrl = '/dayGLANCE/seed/kaoyan.ics';
-    localStorage.setItem('day-planner-task-calendar-url', seedUrl);
-    localStorage.setItem('day-planner-task-calendar-auth', JSON.stringify({ username: '', appPassword: '', caldavBaseUrl: '' }));
-    localStorage.setItem('day-planner-ics-calendars', JSON.stringify([{
-      id: 'kaoyan-seed',
-      url: seedUrl,
-      name: '考研日历 · 邱松鑫',
-      color: 'bg-teal-500',
-      enabled: true,
-    }]));
-    // 把 syncRetentionDays 设为 600 天，覆盖一年半的考研周期
+    // 10 个学科 calendar, 每个独立颜色
+    var calendars = [
+      { id: 'kaoyan-math',    url: '/dayGLANCE/seed/math.ics',    name: '考研·数学',          color: 'bg-rose-500' },
+      { id: 'kaoyan-english', url: '/dayGLANCE/seed/english.ics', name: '考研·英语',          color: 'bg-emerald-500' },
+      { id: 'kaoyan-politics',url: '/dayGLANCE/seed/politics.ics',name: '考研·政治',          color: 'bg-red-500' },
+      { id: 'kaoyan-ds',      url: '/dayGLANCE/seed/ds.ics',      name: '408 数据结构',        color: 'bg-indigo-500' },
+      { id: 'kaoyan-cn',      url: '/dayGLANCE/seed/cn.ics',      name: '408 计算机网络',      color: 'bg-sky-500' },
+      { id: 'kaoyan-os',      url: '/dayGLANCE/seed/os.ics',      name: '408 操作系统',        color: 'bg-amber-500' },
+      { id: 'kaoyan-co',      url: '/dayGLANCE/seed/co.ics',      name: '408 计算机组成原理',  color: 'bg-fuchsia-500' },
+      { id: 'kaoyan-mock',    url: '/dayGLANCE/seed/mock.ics',    name: '考研·模考',          color: 'bg-purple-500' },
+      { id: 'kaoyan-cet6',    url: '/dayGLANCE/seed/cet6.ics',    name: 'CET-6 专项',          color: 'bg-lime-500' },
+      { id: 'kaoyan-life',    url: '/dayGLANCE/seed/life.ics',    name: '生活/课内/通勤',      color: 'bg-stone-500' },
+    ];
+
+    // dayglance 期望的字段: id, name, url, color, enabled
+    var enabled = calendars.map(function(c) {
+      return { id: c.id, name: c.name, url: c.url, color: c.color, enabled: true };
+    });
+
+    localStorage.setItem('day-planner-ics-calendars', JSON.stringify(enabled));
+    // syncRetentionDays 600 天覆盖 2026-09 → 2028-04 考研周期
     localStorage.setItem('day-planner-sync-retention-days', '600');
-    localStorage.setItem(SEED_FLAG, 'v1-imported');
+    // 主 taskCalendarUrl 留空, 我们走 icsCalendars 多源模式
+    localStorage.setItem('day-planner-task-calendar-url', '');
+    localStorage.setItem(SEED_FLAG, 'v2-imported');
   } catch (e) {
-    // localStorage 可能因为隐私模式被禁用，安静失败
     console.warn('[kaoyan-seed] bootstrap skipped:', e);
   }
 })();
