@@ -1,5 +1,5 @@
 import React from 'react';
-import { Calendar, Eye, Flag, Inbox, Settings } from 'lucide-react';
+import { Calendar, Eye, Flag, Inbox, Settings, Sparkles } from 'lucide-react';
 import { isNativeAndroid } from '../native.js';
 import { useDayPlannerCtx } from '../context/DayPlannerContext.jsx';
 import { useFeaturesCtx } from '../context/FeaturesContext.jsx';
@@ -18,6 +18,28 @@ const MobileTabBar = () => {
   const {
     goalsProjectsEnabled, goals, handleRoutinesDone, isVisibleForUser,
   } = useFeaturesCtx();
+  // AI 启用判定: 从 localStorage 读 ai-config (避免引入 useVoiceAI 的循环依赖)
+  const [aiEnabled, setAiEnabled] = React.useState(() => {
+    try {
+      const cfg = JSON.parse(localStorage.getItem('day-planner-ai-config') || 'null');
+      return !!(cfg && cfg.enabled && cfg.apiKey);
+    } catch { return false; }
+  });
+  React.useEffect(() => {
+    const onStorage = () => {
+      try {
+        const cfg = JSON.parse(localStorage.getItem('day-planner-ai-config') || 'null');
+        setAiEnabled(!!(cfg && cfg.enabled && cfg.apiKey));
+      } catch { setAiEnabled(false); }
+    };
+    window.addEventListener('storage', onStorage);
+    // 同一页面内 aiConfig 改变也能触发 (自定义事件)
+    window.addEventListener('kaoyan-ai-config-changed', onStorage);
+    return () => {
+      window.removeEventListener('storage', onStorage);
+      window.removeEventListener('kaoyan-ai-config-changed', onStorage);
+    };
+  }, []);
 
   // Count only the active user's goals (matches the per-user visibility used
   // for goals elsewhere); in single-user mode isVisibleForUser is always true.
@@ -28,7 +50,7 @@ const MobileTabBar = () => {
   const today = new Date(); today.setHours(0, 0, 0, 0);
   const hasOverdueGoal = activeGoals.some(g => g.targetDate && new Date(g.targetDate + 'T00:00:00') < today && g.status !== 'completed');
 
-  const tabCount = 4 + (goalsProjectsEnabled ? 1 : 0);
+  const tabCount = 4 + (goalsProjectsEnabled ? 1 : 0) + (aiEnabled ? 1 : 0);
   const showLabels = tabCount <= 5;
   const iconSize = showLabels ? 20 : 22;
 
@@ -115,6 +137,18 @@ const MobileTabBar = () => {
             )}
           </div>
           {showLabels && <span className="text-[10px] font-medium">{t('goals.goals', { defaultValue: 'Goals' })}</span>}
+        </button>
+        )}
+        {aiEnabled && (
+        <button
+          onClick={() => {
+            setMobileActiveTab('aichat');
+            setMobileSettingsView('main');
+          }}
+          className={`flex flex-col items-center justify-center ${showLabels ? 'gap-0.5' : ''} flex-1 h-full ${mobileActiveTab === 'aichat' ? 'text-purple-500' : textSecondary}`}
+        >
+          <Sparkles size={iconSize} />
+          {showLabels && <span className="text-[10px] font-medium">AI</span>}
         </button>
         )}
         <button

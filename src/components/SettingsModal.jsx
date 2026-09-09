@@ -41,6 +41,15 @@ const SettingsModal = () => {
   const formatUnit = (value, unit) => new Intl.NumberFormat(locale, {
     style: 'unit', unit, unitDisplay: 'long',
   }).format(value);
+  // Kaoyan fork: AI config 改变时, 通知 MobileTabBar 重新判定是否显示 AI tab
+  React.useEffect(() => {
+    try {
+      const cfg = JSON.parse(localStorage.getItem('day-planner-ai-config') || 'null');
+      if (cfg && cfg.enabled && cfg.apiKey) {
+        window.dispatchEvent(new Event('kaoyan-ai-config-changed'));
+      }
+    } catch {}
+  });
   const {
     showSettings, setShowSettings,
     collapsedSettings, toggleSettingsSection,

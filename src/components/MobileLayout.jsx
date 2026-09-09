@@ -31,6 +31,7 @@ import FrameNudgeCard from './FrameNudgeCard.jsx';
 import DeadlinePickerPopover from './DeadlinePickerPopover.jsx';
 import MobileTabBar from './MobileTabBar.jsx';
 import MobileSettingsPanel from './MobileSettingsPanel.jsx';
+import AIChatPage from './AIChatPage.jsx';
 import GoalDashboard from './goals/GoalDashboard.jsx';
 import MobileTimeGrid from './MobileTimeGrid.jsx';
 import SummaryStrip from './SummaryStrip.jsx';
@@ -1161,6 +1162,10 @@ const MobileLayout = () => {
               <GoalDashboard embedded isActive={mobileActiveTab === 'goals'} addGoalTrigger={addGoalTrigger} addProjectTrigger={addProjectTrigger} addAreaTrigger={addAreaTrigger} />
             </div>
 
+            {/* AI Chat stays mounted */}
+            <div className={`flex flex-col flex-1 min-h-0 overflow-hidden ${mobileActiveTab === 'aichat' ? '' : 'hidden'}`}>
+              <AIChatPage />
+            </div>
 
             {mobileActiveTab === 'settings' && <MobileSettingsPanel />}
           </div>
