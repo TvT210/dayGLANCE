@@ -1,6 +1,46 @@
 // Unified AI Service Layer — provider-agnostic client-side AI calls
 // All calls go directly from the browser to the user-configured provider endpoint.
 
+// 考研日历 v2 改造 (2026-09-10):
+// 1) 加 6 Agent 专家配置 (英语/政治/数学/专业课/健身/健康)
+// 2) 加 stripThink 清理 LLM 输出 (思考内容 + 内部 token)
+// 3) 扩 max_tokens 让 6 agent prompt 装得下
+
+// ===== 6 Agent 专家 =====
+export const AGENTS = {
+  general: { name: '通用助手', icon: '🤖', color: '#7f8c8d' },
+  english: { name: '英语专家', icon: '📘', color: '#3498db' },
+  politics: { name: '政治专家', icon: '📕', color: '#e74c3c' },
+  math: { name: '数学专家', icon: '📗', color: '#27ae60' },
+  cs: { name: '专业课专家', icon: '📙', color: '#f39c12' },
+  fitness: { name: '健身专家', icon: '🏋️', color: '#9b59b6' },
+  health: { name: '健康专家', icon: '❤️', color: '#e91e63' },
+};
+
+const AGENT_STORAGE_KEY = 'kaoyan-current-agent';
+export function getCurrentAgent() {
+  try {
+    const a = localStorage.getItem(AGENT_STORAGE_KEY);
+    if (a && AGENTS[a]) return a;
+  } catch {}
+  return 'general';
+}
+export function setCurrentAgent(agent) {
+  if (!AGENTS[agent]) return;
+  try { localStorage.setItem(AGENT_STORAGE_KEY, agent); } catch {}
+}
+
+// 清理 LLM 输出: 去掉 <think>...</think> 内部思考 + 内部 token + 头部空白
+export function stripThink(s) {
+  if (!s) return '';
+  return s
+    .replace(/<think>[\s\S]*?<\/think>/g, '')   // 完整闭合的 <think>
+    .replace(/<think>[\s\S]*$/g, '')              // 未闭合 (流式中间状态)
+    .replace(/<\|[^|]*?\|>/g, '')                 // 内部 token: <|im_end|> <|im_start|> 等
+    .replace(/^[\s\n]+/, '')                      // 头部空白
+    .trim();
+}
+
 const DEFAULT_CONFIG = {
   enabled: false,
   provider: 'openai',
@@ -153,6 +193,7 @@ async function _aiComplete(systemPrompt, userMessage, config) {
             { role: 'user', content: userMessage },
           ],
           temperature: 0.3,
+          max_tokens: 4000,
         }),
       });
       if (!res.ok) {
@@ -162,7 +203,7 @@ async function _aiComplete(systemPrompt, userMessage, config) {
       const data = await res.json();
       const content = data.choices?.[0]?.message?.content;
       if (content == null) throw new Error(`Unexpected response format from ${PROVIDER_LABELS[provider] || provider} API`);
-      return content;
+      return stripThink(content);
     }
 
     case 'anthropic': {
@@ -176,7 +217,7 @@ async function _aiComplete(systemPrompt, userMessage, config) {
         },
         body: JSON.stringify({
           model,
-          max_tokens: 1024,
+          max_tokens: 4000,
           system: systemPrompt,
           messages: [
             { role: 'user', content: userMessage },
@@ -190,7 +231,7 @@ async function _aiComplete(systemPrompt, userMessage, config) {
       const data = await res.json();
       const text = data.content?.[0]?.text;
       if (text == null) throw new Error('Unexpected response format from Anthropic API');
-      return text;
+      return stripThink(text);
     }
 
     case 'gemini': {
@@ -201,7 +242,7 @@ async function _aiComplete(systemPrompt, userMessage, config) {
         body: JSON.stringify({
           systemInstruction: { parts: [{ text: systemPrompt }] },
           contents: [{ parts: [{ text: userMessage }] }],
-          generationConfig: { temperature: 0.3 },
+          generationConfig: { temperature: 0.3, maxOutputTokens: 4000 },
         }),
       });
       if (!res.ok) {
@@ -211,7 +252,7 @@ async function _aiComplete(systemPrompt, userMessage, config) {
       const data = await res.json();
       const geminiText = data.candidates?.[0]?.content?.parts?.[0]?.text;
       if (geminiText == null) throw new Error('Unexpected response format from Gemini API');
-      return geminiText;
+      return stripThink(geminiText);
     }
 
     case 'ollama': {
@@ -226,13 +267,14 @@ async function _aiComplete(systemPrompt, userMessage, config) {
             { role: 'user', content: userMessage },
           ],
           stream: false,
+          options: { num_predict: 4000 },
         }),
       });
       if (!res.ok) {
         throw new Error(`Ollama error: ${res.status}`);
       }
       const data = await res.json();
-      return data.message.content;
+      return stripThink(data.message.content);
     }
 
     default:
