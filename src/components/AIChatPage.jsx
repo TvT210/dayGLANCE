@@ -307,6 +307,11 @@ const AIChatPage = () => {
     });
   }, []);
 
+  // 目标面板不依赖 AI 配置，未配置时也要能进（放在配置检查之前）
+  if (showGoals) {
+    return <KaoyanGoalsPanel onClose={() => setShowGoals(false)} />;
+  }
+
   // AI 未配置（所有 hooks 之后才可提前 return，否则 hook 数量会变化）
   if (!aiConfig?.enabled) {
     return (
@@ -316,10 +321,17 @@ const AIChatPage = () => {
         <p className={`text-sm ${textSecondary} text-center mb-4`}>
           请在 设置 → AI 功能 中启用并配置 API
         </p>
-        <div className="text-xs text-gray-400 text-center max-w-xs">
+        <div className="text-xs text-gray-400 text-center max-w-xs mb-6">
           推荐 Custom (兼容 OpenAI) +<br/>
           <code className="font-mono">https://api.minimaxi.com/v1</code>
         </div>
+        <button
+          onClick={() => setShowGoals(true)}
+          className="flex items-center gap-1.5 px-4 py-2 rounded-lg bg-emerald-500 text-white text-sm"
+        >
+          <Target size={15} /> 考研目标 · 每日任务
+        </button>
+        <div className={`text-[10px] ${textSecondary} mt-2`}>不依赖 AI，可以直接用</div>
       </div>
     );
   }
@@ -329,9 +341,15 @@ const AIChatPage = () => {
       <div className={`flex flex-col items-center justify-center h-full p-6 ${cardBg}`}>
         <Sparkles size={48} className="text-amber-500 mb-4" />
         <h2 className={`text-lg font-bold ${textPrimary} mb-2`}>AI 配置不完整</h2>
-        <p className={`text-sm ${textSecondary} text-center`}>
+        <p className={`text-sm ${textSecondary} text-center mb-4`}>
           缺少 Base URL 或 API Key<br/>请到设置中补全
         </p>
+        <button
+          onClick={() => setShowGoals(true)}
+          className={`flex items-center gap-1.5 px-4 py-2 rounded-lg border ${borderClass} text-sm ${textPrimary}`}
+        >
+          <Target size={15} /> 考研目标 · 每日任务
+        </button>
       </div>
     );
   }
@@ -353,10 +371,6 @@ const AIChatPage = () => {
 
   const currentAgent = AGENTS[agent] || AGENTS.general;
   const suggestions = SUGGESTIONS[agent] || SUGGESTIONS.general;
-
-  if (showGoals) {
-    return <KaoyanGoalsPanel onClose={() => setShowGoals(false)} />;
-  }
 
   // === 渲染 ===
   return (
