@@ -171,6 +171,18 @@ export async function aiComplete(systemPrompt, userMessage, config) {
 }
 
 async function _aiComplete(systemPrompt, userMessage, config) {
+  return _aiCompleteMessages(
+    [
+      { role: 'system', content: systemPrompt },
+      { role: 'user', content: userMessage },
+    ],
+    config
+  );
+}
+
+// Multi-turn variant: takes a full OpenAI-style messages array so the chat
+// page can send history + system prompt + multimodal content parts.
+async function _aiCompleteMessages(messages, config) {
   const { provider, apiKey, model } = config;
 
   switch (provider) {
@@ -188,10 +200,7 @@ async function _aiComplete(systemPrompt, userMessage, config) {
         headers,
         body: JSON.stringify({
           model,
-          messages: [
-            { role: 'system', content: systemPrompt },
-            { role: 'user', content: userMessage },
-          ],
+          messages,
           temperature: 0.3,
           max_tokens: 4000,
         }),
@@ -218,10 +227,8 @@ async function _aiComplete(systemPrompt, userMessage, config) {
         body: JSON.stringify({
           model,
           max_tokens: 4000,
-          system: systemPrompt,
-          messages: [
-            { role: 'user', content: userMessage },
-          ],
+          system: messages.find(m => m.role === 'system')?.content || '',
+          messages: messages.filter(m => m.role !== 'system'),
         }),
       });
       if (!res.ok) {
@@ -262,10 +269,7 @@ async function _aiComplete(systemPrompt, userMessage, config) {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           model,
-          messages: [
-            { role: 'system', content: systemPrompt },
-            { role: 'user', content: userMessage },
-          ],
+          messages,
           stream: false,
           options: { num_predict: 4000 },
         }),
@@ -402,6 +406,143 @@ export async function testConnection(config) {
         : null,
     };
   }
+}
+
+// ===== 考研 fork: 多轮流式对话 =====
+
+// 流式 <think> 过滤器。抑制 <think>...</think> 之间的内容，且不输出；
+// 尾部可能截断的标签前缀会留在缓冲区，避免跨 chunk 拆开时漏过滤。
+export function createThinkFilter() {
+  let buf = '';
+  let inThink = false;
+  const OPEN = '<think>';
+  const CLOSE = '</think>';
+  return function push(chunk) {
+    if (!chunk) return '';
+    buf += chunk;
+    let out = '';
+    for (;;) {
+      if (inThink) {
+        const end = buf.indexOf(CLOSE);
+        if (end === -1) { buf = ''; break; }
+        buf = buf.slice(end + CLOSE.length);
+        inThink = false;
+        continue;
+      }
+      const start = buf.indexOf(OPEN);
+      if (start === -1) {
+        const hold = tailTagPrefix(buf);
+        out += buf.slice(0, buf.length - hold);
+        buf = hold ? buf.slice(buf.length - hold) : '';
+        break;
+      }
+      out += buf.slice(0, start);
+      buf = buf.slice(start + OPEN.length);
+      inThink = true;
+    }
+    return out.replace(/<\|[^|]*?\|>/g, '');
+  };
+}
+
+// buf 尾部是否是尚未闭合的 "<…" 前缀；返回需要保留的字符数
+function tailTagPrefix(s) {
+  const lt = s.lastIndexOf('<');
+  if (lt === -1) return 0;
+  if (s.indexOf('>', lt) !== -1) return 0;
+  return Math.min(s.length - lt, 16);
+}
+
+/**
+ * 多轮聊天。支持完整 messages（含 system 与多模态 content）、中止信号、
+ * 以及流式增量回调。OpenAI 兼容端点走 SSE 流式；其余 provider 退化成
+ * 一次性返回，但仍通过 onDelta 输出。
+ */
+export async function aiChat({ messages, config, model, signal, onDelta, maxTokens }) {
+  if (!config?.enabled || (!config.apiKey && config.provider !== 'ollama')) {
+    throw new Error('AI 未配置，请到设置 → AI 功能 启用并填写 API');
+  }
+  // 设置页可能没显式保存 provider；只要有 baseUrl 就按 OpenAI 兼容端点处理
+  const provider = config.provider || (config.baseUrl ? 'custom' : 'openai');
+  const cfg = { ...config, provider };
+  const modelId = model || config.model;
+  const filter = createThinkFilter();
+  const emit = (text) => {
+    if (!text) return;
+    const clean = filter(text);
+    if (clean && typeof onDelta === 'function') onDelta(clean);
+  };
+
+  const canStream = ['openai', 'openrouter', 'custom'].includes(provider);
+  if (!canStream || typeof onDelta !== 'function') {
+    const full = await withRetry(() => _aiCompleteMessages(messages, { ...cfg, model: modelId }));
+    emit(full);
+    return full;
+  }
+
+  const base = provider === 'custom' ? (cfg.baseUrl || '') : getBaseUrl(cfg);
+  if (!base) throw new Error('缺少 Base URL，请到设置 → AI 功能 补全');
+
+  const headers = {
+    'Content-Type': 'application/json',
+    'Authorization': `Bearer ${cfg.apiKey}`,
+  };
+  if (provider === 'openrouter') headers['HTTP-Referer'] = 'https://dayglance.app';
+
+  const res = await fetch(`${base}/chat/completions`, {
+    method: 'POST',
+    headers,
+    signal,
+    body: JSON.stringify({
+      model: modelId,
+      messages,
+      temperature: 0.3,
+      max_tokens: maxTokens || 4000,
+      stream: true,
+    }),
+  });
+
+  if (!res.ok) {
+    const txt = await res.text().catch(() => '');
+    let detail = txt.slice(0, 300);
+    try { detail = JSON.parse(txt)?.error?.message || detail; } catch {}
+    throw new Error(`HTTP ${res.status}: ${detail}`);
+  }
+
+  if (!res.body) {
+    const data = await res.json().catch(() => ({}));
+    const content = data.choices?.[0]?.message?.content || '';
+    emit(content);
+    return stripThink(content);
+  }
+
+  const reader = res.body.getReader();
+  const decoder = new TextDecoder();
+  let buffer = '';
+  let full = '';
+
+  const consumeLine = (line) => {
+    const t = line.trim();
+    if (!t.startsWith('data:')) return;
+    const payload = t.slice(5).trim();
+    if (!payload || payload === '[DONE]') return;
+    try {
+      const json = JSON.parse(payload);
+      const delta = json.choices?.[0]?.delta?.content;
+      if (delta) { full += delta; emit(delta); }
+    } catch {}
+  };
+
+  for (;;) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    buffer += decoder.decode(value, { stream: true });
+    const lines = buffer.split('\n');
+    buffer = lines.pop() || '';
+    for (const line of lines) consumeLine(line);
+  }
+  if (buffer.trim()) consumeLine(buffer);
+
+  return stripThink(full);
 }
 
 export { DEFAULT_CONFIG, PROVIDER_MODELS, PROVIDER_LABELS };

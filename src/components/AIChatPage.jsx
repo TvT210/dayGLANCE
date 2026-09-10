@@ -1,48 +1,116 @@
 // AIChatPage.jsx
-// ChatGPT 风格的 AI 对话页面: 文本输入 + 语音 + 拍照 + 文件上传
-// 调用 aiConfig.baseUrl (OpenAI 兼容), 持久化消息到 localStorage
-import React, { useState, useEffect, useRef, useCallback } from 'react';
+// ChatGPT 风格的 AI 对话页面: 6 Agent 专家 + 文本输入 + 语音 + 拍照 + 文件上传
+// 统一走 src/ai.js 的 aiChat（多轮 + 流式 + <think> 实时过滤）
+import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import {
   Plus, Send, Mic, MicOff, Camera, Paperclip, X, ChevronDown,
-  Sparkles, User, Bot, StopCircle, Image as ImageIcon, FileText,
-  RotateCcw, Trash2,
+  Sparkles, User, Bot, StopCircle, FileText,
+  RotateCcw, Trash2, Target,
 } from 'lucide-react';
 import { useDayPlannerCtx } from '../context/DayPlannerContext.jsx';
 import { useFeaturesCtx } from '../context/FeaturesContext.jsx';
 import { useTranslation } from 'react-i18next';
+import { AGENTS, getCurrentAgent, setCurrentAgent, aiChat } from '../ai.js';
+import { agentPromptByKey } from '../ai-prompts.js';
+import KaoyanGoalsPanel from '../kaoyan/KaoyanGoalsPanel.jsx';
 
-const STORAGE_KEY = 'kaoyan-ai-chat-history';
+const LEGACY_STORAGE_KEY = 'kaoyan-ai-chat-history';
+const STORE_KEY = 'kaoyan-ai-chat-store-v1';
 
-const SUGGESTIONS = [
-  { icon: '📚', title: '今日计划', desc: '基于今天日历给我一份 3-5 步的执行清单' },
-  { icon: '🧮', title: '数学答疑', desc: '把这道题的做法讲一下' },
-  { icon: '📝', title: '英语长难句', desc: '拆解这句的结构和翻译' },
-  { icon: '🎯', title: '进度复盘', desc: '根据本周完成情况给下周建议' },
-];
+const uid = () =>
+  (typeof crypto !== 'undefined' && crypto.randomUUID)
+    ? crypto.randomUUID()
+    : `m-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
 
-function loadHistory() {
+// 每个 agent 一套历史，key 与 AGENTS 对齐
+function loadStore() {
   try {
-    return JSON.parse(localStorage.getItem(STORAGE_KEY) || '[]');
-  } catch { return []; }
+    const raw = localStorage.getItem(STORE_KEY);
+    if (raw) return JSON.parse(raw) || {};
+  } catch {}
+  // 迁移旧的单会话历史到「通用助手」
+  try {
+    const old = JSON.parse(localStorage.getItem(LEGACY_STORAGE_KEY) || '[]');
+    if (Array.isArray(old) && old.length > 0) return { general: old };
+  } catch {}
+  return {};
 }
-function saveHistory(msgs) {
-  try { localStorage.setItem(STORAGE_KEY, JSON.stringify(msgs.slice(-200))); } catch {}
+
+function saveStore(store) {
+  try {
+    const trimmed = {};
+    for (const [k, v] of Object.entries(store || {})) {
+      trimmed[k] = (v || []).slice(-200);
+    }
+    localStorage.setItem(STORE_KEY, JSON.stringify(trimmed));
+  } catch {}
 }
+
+const GENERAL_SYSTEM = `你是邱松鑫的考研备考助手。他是广东技术师范大学网络工程专业学生，目标 2027 考研（初试 2026-12）。
+回答要具体、可执行，给出明确的时长/题量/章节，不要空泛的"多练多看"。
+不要输出 <think> 标签，不要输出 <|im_end|> <|im_start|> 这类内部 token，只用干净的标准 Markdown。`;
+
+const SUGGESTIONS = {
+  general: [
+    { icon: '📚', title: '今日计划', desc: '基于今天日历给我一份 3-5 步的执行清单' },
+    { icon: '🧮', title: '数学答疑', desc: '把这道题的做法讲一下' },
+    { icon: '📝', title: '英语长难句', desc: '拆解这句的结构和翻译' },
+    { icon: '🎯', title: '进度复盘', desc: '根据本周完成情况给下周建议' },
+  ],
+  english: [
+    { icon: '📖', title: '今日词汇', desc: '给我今天要背的 40 个核心词，带例句' },
+    { icon: '📝', title: '长难句', desc: '拆解这句的结构并给出翻译思路' },
+    { icon: '📄', title: '阅读精读', desc: '这道题为什么选这个答案，其他选项错在哪' },
+    { icon: '✍️', title: '作文批改', desc: '帮我改这段作文，指出语法和高级表达' },
+  ],
+  politics: [
+    { icon: '📕', title: '马原考点', desc: '这一章的核心考点和易错点' },
+    { icon: '📰', title: '时政梳理', desc: '本月时政要点和可能的出题角度' },
+    { icon: '✅', title: '1000 题答疑', desc: '这道题的解析和相关知识点' },
+    { icon: '🗓️', title: '冲刺排期', desc: '距离初试还有 100 天，怎么安排政治' },
+  ],
+  math: [
+    { icon: '🧮', title: '题目求解', desc: '这道题怎么做，考点是什么' },
+    { icon: '📐', title: '概念辨析', desc: '这两个概念的区别和联系' },
+    { icon: '⚠️', title: '易错点', desc: '这类题我总错，帮我总结易错点' },
+    { icon: '📊', title: '真题规划', desc: '真题该怎么刷，时间怎么分配' },
+  ],
+  cs: [
+    { icon: '🌳', title: '数据结构', desc: '这个算法的时间复杂度和手写代码' },
+    { icon: '🖥️', title: '操作系统', desc: '进程调度/内存管理这块怎么考' },
+    { icon: '🔌', title: '计算机网络', desc: '这一层的协议和典型计算题' },
+    { icon: '🧩', title: '组成原理', desc: '这个部件的工作原理和考点' },
+  ],
+  fitness: [
+    { icon: '🏋️', title: '今日训练', desc: '今天练什么部位，具体动作和组数' },
+    { icon: '🍗', title: '饮食安排', desc: '训练前后的饮食怎么吃' },
+    { icon: '😴', title: '疲劳调整', desc: '这几天很累，训练要不要减量' },
+    { icon: '📈', title: '计划进阶', desc: '三个月后怎么调整训练计划' },
+  ],
+  health: [
+    { icon: '😴', title: '睡眠优化', desc: '睡不够怎么办，怎么提高效率' },
+    { icon: '👀', title: '用眼保护', desc: '长时间看书眼睛累怎么缓解' },
+    { icon: '🧘', title: '焦虑缓解', desc: '最近很焦虑，怎么办' },
+    { icon: '🍚', title: '三餐安排', desc: '考研期间的饮食怎么安排' },
+  ],
+};
 
 const AIChatPage = () => {
   const { t } = useTranslation();
-  const { aiConfig } = useFeaturesCtx();
+  const { aiConfig } = useFeaturesCtx() || {};
   const { cardBg, borderClass, textPrimary, textSecondary, darkMode } = useDayPlannerCtx();
 
-  const [messages, setMessages] = useState(() => loadHistory());
+  const [agent, setAgent] = useState(() => getCurrentAgent());
+  const [store, setStore] = useState(() => loadStore());
   const [input, setInput] = useState('');
-  const [attachments, setAttachments] = useState([]); // [{kind:'image'|'file', name, dataUrl}]
+  const [attachments, setAttachments] = useState([]);
   const [isStreaming, setIsStreaming] = useState(false);
   const [isRecording, setIsRecording] = useState(false);
   const [recordingTime, setRecordingTime] = useState(0);
   const [showModelPicker, setShowModelPicker] = useState(false);
   const [selectedModel, setSelectedModel] = useState('');
   const [error, setError] = useState('');
+  const [showGoals, setShowGoals] = useState(false);
 
   const scrollerRef = useRef(null);
   const inputRef = useRef(null);
@@ -50,6 +118,16 @@ const AIChatPage = () => {
   const cameraInputRef = useRef(null);
   const mediaRecorderRef = useRef(null);
   const recordingTimerRef = useRef(null);
+  const abortRef = useRef(null);
+
+  const messages = useMemo(() => store[agent] || [], [store, agent]);
+  const setMessages = useCallback((updater) => {
+    setStore(prev => {
+      const cur = prev[agent] || [];
+      const next = typeof updater === 'function' ? updater(cur) : updater;
+      return { ...prev, [agent]: next };
+    });
+  }, [agent]);
 
   // 初始化模型选择
   useEffect(() => {
@@ -59,7 +137,7 @@ const AIChatPage = () => {
   }, [aiConfig?.model]);
 
   // 持久化
-  useEffect(() => { saveHistory(messages); }, [messages]);
+  useEffect(() => { saveStore(store); }, [store]);
 
   // 自动滚到底
   useEffect(() => {
@@ -68,66 +146,33 @@ const AIChatPage = () => {
     }
   }, [messages, isStreaming]);
 
-  // AI 未配置
-  if (!aiConfig?.enabled) {
-    return (
-      <div className={`flex flex-col items-center justify-center h-full p-6 ${cardBg}`}>
-        <Sparkles size={48} className="text-purple-500 mb-4" />
-        <h2 className={`text-lg font-bold ${textPrimary} mb-2`}>AI 未启用</h2>
-        <p className={`text-sm ${textSecondary} text-center mb-4`}>
-          请在 设置 → AI 功能 中启用并配置 API
-        </p>
-        <div className="text-xs text-gray-400 text-center max-w-xs">
-          推荐 Custom (兼容 OpenAI) +<br/>
-          <code className="font-mono">https://api.minimaxi.com/v1</code>
-        </div>
-      </div>
-    );
-  }
+  // 切换 agent
+  const switchAgent = useCallback((key) => {
+    if (!AGENTS[key]) return;
+    setCurrentAgent(key);
+    setAgent(key);
+    setError('');
+    setAttachments([]);
+  }, []);
 
-  if (!aiConfig.baseUrl || !aiConfig.apiKey) {
-    return (
-      <div className={`flex flex-col items-center justify-center h-full p-6 ${cardBg}`}>
-        <Sparkles size={48} className="text-amber-500 mb-4" />
-        <h2 className={`text-lg font-bold ${textPrimary} mb-2`}>AI 配置不完整</h2>
-        <p className={`text-sm ${textSecondary} text-center`}>
-          缺少 Base URL 或 API Key<br/>请到设置中补全
-        </p>
-      </div>
-    );
-  }
+  // 未配置 provider 但有 baseUrl 时按 OpenAI 兼容端点处理
+  const effectiveConfig = useMemo(() => ({
+    ...(aiConfig || {}),
+    provider: aiConfig?.provider || (aiConfig?.baseUrl ? 'custom' : 'openai'),
+  }), [aiConfig]);
 
-  // === 核心: 调用 AI ===
-  const callAI = useCallback(async (userMessages) => {
-    const url = (aiConfig.baseUrl || '').replace(/\/+$/, '') + '/chat/completions';
-    const body = {
-      model: selectedModel || aiConfig.model || 'MiniMax-M3',
-      messages: userMessages,
-      stream: false,
-    };
-    const r = await fetch(url, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${aiConfig.apiKey}`,
-      },
-      body: JSON.stringify(body),
-    });
-    if (!r.ok) {
-      const txt = await r.text().catch(() => '');
-      throw new Error(`HTTP ${r.status}: ${txt.slice(0, 200)}`);
-    }
-    const data = await r.json();
-    return data.choices?.[0]?.message?.content || '(无回复)';
-  }, [aiConfig, selectedModel]);
+  const systemPrompt = useMemo(
+    () => agentPromptByKey(agent) || GENERAL_SYSTEM,
+    [agent]
+  );
 
-  // === 发送消息 ===
+  // === 发送消息（流式） ===
   const sendMessage = useCallback(async (overrideText) => {
     const text = (overrideText ?? input).trim();
     if (!text && attachments.length === 0) return;
     if (isStreaming) return;
 
-    // 构造 user content (支持多模态简化: 文本 + attachment 描述)
+    // 构造 user content (多模态: 文本 + 图片)
     const userContent = [];
     if (text) userContent.push({ type: 'text', text });
     for (const att of attachments) {
@@ -140,6 +185,7 @@ const AIChatPage = () => {
     }
 
     const userMsg = {
+      id: uid(),
       role: 'user',
       content: userContent.length === 1 && userContent[0].type === 'text'
         ? userContent[0].text
@@ -147,31 +193,63 @@ const AIChatPage = () => {
       ts: Date.now(),
     };
 
-    const newMessages = [...messages, userMsg];
-    setMessages(newMessages);
+    const history = [...messages, userMsg];
+    setMessages(history);
     setInput('');
     setAttachments([]);
     setError('');
     setIsStreaming(true);
 
-    // 准备给 AI 的 messages (只发 role + content, 不要 ts)
-    const aiMessages = newMessages.map(m => ({ role: m.role, content: m.content }));
+    // 给 AI 的 messages: system + 历史（去掉 ts/id 等 UI 字段）
+    const aiMessages = [
+      { role: 'system', content: systemPrompt },
+      ...history.map(m => ({
+        role: m.role,
+        content: typeof m.content === 'string' ? m.content : m.content,
+      })),
+    ];
+
+    const replyId = uid();
+    setMessages(prev => [...prev, { id: replyId, role: 'assistant', content: '', ts: Date.now() }]);
+
+    const controller = new AbortController();
+    abortRef.current = controller;
 
     try {
-      const reply = await callAI(aiMessages);
-      setMessages(prev => [...prev, { role: 'assistant', content: reply, ts: Date.now() }]);
+      await aiChat({
+        messages: aiMessages,
+        config: effectiveConfig,
+        model: selectedModel || aiConfig.model,
+        signal: controller.signal,
+        onDelta: (delta) => {
+          setMessages(prev => prev.map(m =>
+            m.id === replyId ? { ...m, content: m.content + delta } : m
+          ));
+        },
+      });
     } catch (err) {
-      setError(err.message || '请求失败');
-      setMessages(prev => [...prev, {
-        role: 'assistant',
-        content: `❌ 请求失败: ${err.message || '网络错误'}`,
-        ts: Date.now(),
-        isError: true,
-      }]);
+      if (err?.name === 'AbortError') {
+        setMessages(prev => prev.map(m =>
+          m.id === replyId && !m.content ? { ...m, content: '（已停止生成）' } : m
+        ));
+      } else {
+        const msg = err?.message || '网络错误';
+        setError(msg);
+        setMessages(prev => prev.map(m =>
+          m.id === replyId
+            ? { ...m, content: `❌ 请求失败: ${msg}`, isError: true }
+            : m
+        ));
+      }
     } finally {
       setIsStreaming(false);
+      abortRef.current = null;
     }
-  }, [input, attachments, messages, isStreaming, callAI]);
+  }, [input, attachments, messages, isStreaming, systemPrompt, effectiveConfig, selectedModel, aiConfig, setMessages]);
+
+  const stopGenerating = useCallback(() => {
+    if (abortRef.current) abortRef.current.abort();
+  }, []);
 
   // === 录音 (Web Speech API) ===
   const startRecording = useCallback(() => {
@@ -229,12 +307,41 @@ const AIChatPage = () => {
     });
   }, []);
 
+  // AI 未配置（所有 hooks 之后才可提前 return，否则 hook 数量会变化）
+  if (!aiConfig?.enabled) {
+    return (
+      <div className={`flex flex-col items-center justify-center h-full p-6 ${cardBg}`}>
+        <Sparkles size={48} className="text-purple-500 mb-4" />
+        <h2 className={`text-lg font-bold ${textPrimary} mb-2`}>AI 未启用</h2>
+        <p className={`text-sm ${textSecondary} text-center mb-4`}>
+          请在 设置 → AI 功能 中启用并配置 API
+        </p>
+        <div className="text-xs text-gray-400 text-center max-w-xs">
+          推荐 Custom (兼容 OpenAI) +<br/>
+          <code className="font-mono">https://api.minimaxi.com/v1</code>
+        </div>
+      </div>
+    );
+  }
+
+  if (!aiConfig.baseUrl || !aiConfig.apiKey) {
+    return (
+      <div className={`flex flex-col items-center justify-center h-full p-6 ${cardBg}`}>
+        <Sparkles size={48} className="text-amber-500 mb-4" />
+        <h2 className={`text-lg font-bold ${textPrimary} mb-2`}>AI 配置不完整</h2>
+        <p className={`text-sm ${textSecondary} text-center`}>
+          缺少 Base URL 或 API Key<br/>请到设置中补全
+        </p>
+      </div>
+    );
+  }
+
   const removeAttachment = (idx) => {
     setAttachments(prev => prev.filter((_, i) => i !== idx));
   };
 
   const newChat = () => {
-    if (messages.length > 0 && !confirm('清空当前对话?')) return;
+    if (messages.length > 0 && !confirm('清空当前专家的对话?')) return;
     setMessages([]);
     setAttachments([]);
     setError('');
@@ -244,17 +351,27 @@ const AIChatPage = () => {
     setMessages(prev => prev.filter((_, i) => i !== idx));
   };
 
+  const currentAgent = AGENTS[agent] || AGENTS.general;
+  const suggestions = SUGGESTIONS[agent] || SUGGESTIONS.general;
+
+  if (showGoals) {
+    return <KaoyanGoalsPanel onClose={() => setShowGoals(false)} />;
+  }
+
   // === 渲染 ===
   return (
     <div className={`flex flex-col h-full ${cardBg}`}>
       {/* 顶部 bar */}
-      <div className={`flex items-center justify-between px-4 py-3 border-b ${borderClass} flex-shrink-0`}>
-        <div className="flex items-center gap-2">
-          <div className="w-8 h-8 rounded-full bg-gradient-to-br from-purple-500 to-pink-500 flex items-center justify-center">
-            <Sparkles size={16} className="text-white" />
+      <div className={`flex items-center justify-between px-4 py-2.5 border-b ${borderClass} flex-shrink-0`}>
+        <div className="flex items-center gap-2 min-w-0">
+          <div
+            className="w-8 h-8 rounded-full flex items-center justify-center flex-shrink-0"
+            style={{ backgroundColor: currentAgent.color }}
+          >
+            <span className="text-base">{currentAgent.icon}</span>
           </div>
-          <div>
-            <div className={`font-bold text-sm ${textPrimary}`}>考研 AI</div>
+          <div className="min-w-0">
+            <div className={`font-bold text-sm ${textPrimary} truncate`}>{currentAgent.name}</div>
             <button
               onClick={() => setShowModelPicker(!showModelPicker)}
               className={`text-[10px] ${textSecondary} flex items-center gap-0.5`}
@@ -264,7 +381,14 @@ const AIChatPage = () => {
             </button>
           </div>
         </div>
-        <div className="flex items-center gap-1">
+        <div className="flex items-center gap-1 flex-shrink-0">
+          <button
+            onClick={() => setShowGoals(true)}
+            className={`p-2 rounded-lg ${textSecondary} hover:bg-gray-100 dark:hover:bg-gray-800`}
+            title="考研目标 · 每日任务"
+          >
+            <Target size={18} />
+          </button>
           <button
             onClick={newChat}
             className={`p-2 rounded-lg ${textSecondary} hover:bg-gray-100 dark:hover:bg-gray-800`}
@@ -273,6 +397,30 @@ const AIChatPage = () => {
             <Plus size={18} />
           </button>
         </div>
+      </div>
+
+      {/* 6 Agent 切换器 */}
+      <div className={`flex gap-1.5 overflow-x-auto px-3 py-2 border-b ${borderClass} flex-shrink-0 scrollbar-none`}>
+        {Object.entries(AGENTS).map(([key, a]) => {
+          const active = key === agent;
+          const count = (store[key] || []).length;
+          return (
+            <button
+              key={key}
+              onClick={() => switchAgent(key)}
+              className={`flex items-center gap-1 px-2.5 py-1 rounded-full text-xs whitespace-nowrap flex-shrink-0 transition-colors ${
+                active ? 'text-white' : (darkMode ? 'bg-gray-800 text-gray-300' : 'bg-gray-100 text-gray-600')
+              }`}
+              style={active ? { backgroundColor: a.color } : undefined}
+            >
+              <span>{a.icon}</span>
+              <span>{a.name.replace('专家', '')}</span>
+              {count > 0 && !active && (
+                <span className="text-[9px] opacity-60">{count}</span>
+              )}
+            </button>
+          );
+        })}
       </div>
 
       {/* 模型选择下拉 */}
@@ -300,17 +448,22 @@ const AIChatPage = () => {
       {/* 消息区 */}
       <div ref={scrollerRef} className="flex-1 overflow-y-auto px-4 py-4">
         {messages.length === 0 ? (
-          <EmptyState onPick={sendMessage} />
+          <EmptyState
+            onPick={sendMessage}
+            agent={currentAgent}
+            suggestions={suggestions}
+            onOpenGoals={() => setShowGoals(true)}
+          />
         ) : (
           <div className="max-w-3xl mx-auto space-y-4">
             {messages.map((m, idx) => (
               <MessageBubble
-                key={idx}
+                key={m.id || idx}
                 message={m}
+                agent={currentAgent}
                 onRemove={() => removeMessage(idx)}
                 onRegenerate={m.role === 'assistant' && idx === messages.length - 1
                   ? () => {
-                      // 删最后一条, 重新发
                       setMessages(prev => prev.slice(0, -1));
                       const lastUser = [...messages].reverse().find(x => x.role === 'user');
                       if (lastUser) {
@@ -323,11 +476,14 @@ const AIChatPage = () => {
             ))}
             {isStreaming && (
               <div className="flex gap-3 items-start">
-                <div className="w-7 h-7 rounded-full bg-gradient-to-br from-purple-500 to-pink-500 flex items-center justify-center flex-shrink-0">
+                <div
+                  className="w-7 h-7 rounded-full flex items-center justify-center flex-shrink-0"
+                  style={{ backgroundColor: currentAgent.color }}
+                >
                   <Bot size={14} className="text-white" />
                 </div>
                 <div className="flex-1">
-                  <div className="text-xs text-gray-400 mb-1">AI 正在思考</div>
+                  <div className="text-xs text-gray-400 mb-1">思考中</div>
                   <div className="flex gap-1">
                     <span className="w-2 h-2 bg-gray-400 rounded-full animate-bounce" style={{ animationDelay: '0ms' }}></span>
                     <span className="w-2 h-2 bg-gray-400 rounded-full animate-bounce" style={{ animationDelay: '150ms' }}></span>
@@ -350,7 +506,6 @@ const AIChatPage = () => {
 
       {/* 输入区 */}
       <div className={`border-t ${borderClass} px-3 py-3 flex-shrink-0 ${cardBg}`}>
-        {/* 附件预览 */}
         {attachments.length > 0 && (
           <div className="max-w-3xl mx-auto mb-2 flex flex-wrap gap-2">
             {attachments.map((a, i) => (
@@ -374,10 +529,8 @@ const AIChatPage = () => {
           </div>
         )}
 
-        {/* 输入框 */}
         <div className="max-w-3xl mx-auto">
           <div className={`flex items-end gap-2 p-2 rounded-2xl border ${borderClass} ${darkMode ? 'bg-gray-800' : 'bg-white'} shadow-sm`}>
-            {/* 附件按钮 */}
             <button
               onClick={() => fileInputRef.current?.click()}
               className={`p-2 ${textSecondary} hover:text-blue-500 flex-shrink-0`}
@@ -385,7 +538,6 @@ const AIChatPage = () => {
             >
               <Paperclip size={18} />
             </button>
-            {/* 拍照 */}
             <button
               onClick={() => cameraInputRef.current?.click()}
               className={`p-2 ${textSecondary} hover:text-blue-500 flex-shrink-0`}
@@ -393,7 +545,6 @@ const AIChatPage = () => {
             >
               <Camera size={18} />
             </button>
-            {/* 文本框 */}
             <textarea
               ref={inputRef}
               value={input}
@@ -404,7 +555,7 @@ const AIChatPage = () => {
                   sendMessage();
                 }
               }}
-              placeholder={isRecording ? `🎤 录音中... ${recordingTime}s` : '输入消息, Enter 发送, Shift+Enter 换行'}
+              placeholder={isRecording ? `🎤 录音中... ${recordingTime}s` : `问${currentAgent.name}... Enter 发送`}
               rows={1}
               className={`flex-1 resize-none bg-transparent ${textPrimary} text-sm focus:outline-none max-h-32`}
               style={{ minHeight: '24px' }}
@@ -413,7 +564,6 @@ const AIChatPage = () => {
                 e.target.style.height = Math.min(e.target.scrollHeight, 128) + 'px';
               }}
             />
-            {/* 语音按钮 */}
             <button
               onClick={isRecording ? stopRecording : startRecording}
               className={`p-2 flex-shrink-0 ${isRecording ? 'text-red-500 animate-pulse' : textSecondary + ' hover:text-blue-500'}`}
@@ -421,26 +571,27 @@ const AIChatPage = () => {
             >
               {isRecording ? <MicOff size={18} /> : <Mic size={18} />}
             </button>
-            {/* 发送 */}
             <button
-              onClick={() => sendMessage()}
-              disabled={(!input.trim() && attachments.length === 0) || isStreaming}
+              onClick={isStreaming ? stopGenerating : () => sendMessage()}
+              disabled={!isStreaming && (!input.trim() && attachments.length === 0)}
               className={`p-2 rounded-full flex-shrink-0 ${
-                (input.trim() || attachments.length > 0) && !isStreaming
-                  ? 'bg-gradient-to-br from-purple-500 to-pink-500 text-white'
-                  : 'bg-gray-200 dark:bg-gray-700 text-gray-400'
+                isStreaming
+                  ? 'bg-red-500 text-white'
+                  : (input.trim() || attachments.length > 0)
+                    ? 'text-white'
+                    : 'bg-gray-200 dark:bg-gray-700 text-gray-400'
               }`}
-              title="发送"
+              style={!isStreaming && (input.trim() || attachments.length > 0) ? { backgroundColor: currentAgent.color } : undefined}
+              title={isStreaming ? '停止生成' : '发送'}
             >
               {isStreaming ? <StopCircle size={18} /> : <Send size={18} />}
             </button>
           </div>
           <div className={`text-[10px] text-center mt-1 ${textSecondary}`}>
-            消息会保存在本地浏览器, 不上传云端
+            各专家独立记忆 · 消息仅存本地浏览器
           </div>
         </div>
 
-        {/* 隐藏的 input */}
         <input
           ref={fileInputRef}
           type="file"
@@ -463,17 +614,20 @@ const AIChatPage = () => {
 };
 
 // 空状态 (欢迎页)
-const EmptyState = ({ onPick }) => {
+const EmptyState = ({ onPick, agent, suggestions, onOpenGoals }) => {
   const { cardBg, textPrimary, textSecondary, borderClass } = useDayPlannerCtx();
   return (
     <div className="max-w-3xl mx-auto flex flex-col items-center justify-center h-full">
-      <div className="w-16 h-16 rounded-2xl bg-gradient-to-br from-purple-500 to-pink-500 flex items-center justify-center mb-4">
-        <Sparkles size={32} className="text-white" />
+      <div
+        className="w-16 h-16 rounded-2xl flex items-center justify-center mb-4 text-3xl"
+        style={{ backgroundColor: agent.color }}
+      >
+        {agent.icon}
       </div>
-      <h2 className={`text-xl font-bold ${textPrimary} mb-1`}>考研 AI</h2>
+      <h2 className={`text-xl font-bold ${textPrimary} mb-1`}>{agent.name}</h2>
       <p className={`text-sm ${textSecondary} mb-8`}>我能帮你学习, 答疑, 计划, 复盘</p>
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 w-full max-w-2xl">
-        {SUGGESTIONS.map((s, i) => (
+        {suggestions.map((s, i) => (
           <button
             key={i}
             onClick={() => onPick(s.desc)}
@@ -485,12 +639,18 @@ const EmptyState = ({ onPick }) => {
           </button>
         ))}
       </div>
+      <button
+        onClick={onOpenGoals}
+        className={`mt-6 text-xs ${textSecondary} underline`}
+      >
+        查看考研目标与每日任务
+      </button>
     </div>
   );
 };
 
 // 消息气泡
-const MessageBubble = ({ message, onRemove, onRegenerate }) => {
+const MessageBubble = ({ message, agent, onRemove, onRegenerate }) => {
   const { textSecondary } = useDayPlannerCtx();
   const isUser = message.role === 'user';
   const content = typeof message.content === 'string'
@@ -499,48 +659,54 @@ const MessageBubble = ({ message, onRemove, onRegenerate }) => {
   const images = typeof message.content === 'object'
     ? message.content?.filter(c => c.type === 'image_url').map(c => c.image_url?.url) || []
     : [];
+  const empty = !isUser && !content && !images.length;
 
   return (
     <div className={`flex gap-3 items-start group ${isUser ? 'flex-row-reverse' : ''}`}>
-      <div className={`w-7 h-7 rounded-full flex items-center justify-center flex-shrink-0 ${
-        isUser
-          ? 'bg-gradient-to-br from-blue-500 to-cyan-500'
-          : 'bg-gradient-to-br from-purple-500 to-pink-500'
-      }`}>
-        {isUser ? <User size={14} className="text-white" /> : <Bot size={14} className="text-white" />}
+      <div
+        className="w-7 h-7 rounded-full flex items-center justify-center flex-shrink-0"
+        style={{
+          backgroundColor: isUser ? '#3b82f6' : agent.color,
+        }}
+      >
+        {isUser ? <User size={14} className="text-white" /> : <span className="text-sm">{agent.icon}</span>}
       </div>
       <div className={`flex-1 min-w-0 ${isUser ? 'flex flex-col items-end' : ''}`}>
         <div className={`text-xs ${textSecondary} mb-1 ${isUser ? 'text-right' : ''}`}>
-          {isUser ? '你' : 'AI'} · {new Date(message.ts).toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' })}
+          {isUser ? '你' : agent.name} · {new Date(message.ts).toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' })}
         </div>
-        <div className={`inline-block max-w-[85%] rounded-2xl px-4 py-2.5 ${
-          isUser
-            ? 'bg-gradient-to-br from-blue-500 to-cyan-500 text-white'
-            : message.isError
-              ? 'bg-red-50 dark:bg-red-900/20 text-red-700 dark:text-red-300 border border-red-200 dark:border-red-800'
-              : 'bg-gray-100 dark:bg-gray-800 text-gray-900 dark:text-gray-100'
-        }`}>
-          {images.length > 0 && (
-            <div className="mb-2 flex flex-wrap gap-1">
-              {images.map((src, i) => (
-                <img key={i} src={src} alt="" className="max-w-[200px] max-h-[200px] rounded-lg" />
-              ))}
+        {!empty && (
+          <div className={`inline-block max-w-[85%] rounded-2xl px-4 py-2.5 ${
+            isUser
+              ? 'bg-gradient-to-br from-blue-500 to-cyan-500 text-white'
+              : message.isError
+                ? 'bg-red-50 dark:bg-red-900/20 text-red-700 dark:text-red-300 border border-red-200 dark:border-red-800'
+                : 'bg-gray-100 dark:bg-gray-800 text-gray-900 dark:text-gray-100'
+          }`}>
+            {images.length > 0 && (
+              <div className="mb-2 flex flex-wrap gap-1">
+                {images.map((src, i) => (
+                  <img key={i} src={src} alt="" className="max-w-[200px] max-h-[200px] rounded-lg" />
+                ))}
+              </div>
+            )}
+            <div className="text-sm whitespace-pre-wrap break-words leading-relaxed">
+              {content}
             </div>
-          )}
-          <div className="text-sm whitespace-pre-wrap break-words leading-relaxed">
-            {content}
           </div>
-        </div>
-        <div className={`opacity-0 group-hover:opacity-100 transition-opacity mt-1 flex gap-2 ${isUser ? 'justify-end' : ''}`}>
-          {onRegenerate && (
-            <button onClick={onRegenerate} className={`text-[10px] ${textSecondary} hover:text-blue-500 flex items-center gap-0.5`}>
-              <RotateCcw size={10} /> 重新生成
+        )}
+        {!empty && (
+          <div className={`opacity-0 group-hover:opacity-100 transition-opacity mt-1 flex gap-2 ${isUser ? 'justify-end' : ''}`}>
+            {onRegenerate && (
+              <button onClick={onRegenerate} className={`text-[10px] ${textSecondary} hover:text-blue-500 flex items-center gap-0.5`}>
+                <RotateCcw size={10} /> 重新生成
+              </button>
+            )}
+            <button onClick={onRemove} className={`text-[10px] ${textSecondary} hover:text-red-500 flex items-center gap-0.5`}>
+              <Trash2 size={10} /> 删除
             </button>
-          )}
-          <button onClick={onRemove} className={`text-[10px] ${textSecondary} hover:text-red-500 flex items-center gap-0.5`}>
-            <Trash2 size={10} /> 删除
-          </button>
-        </div>
+          </div>
+        )}
       </div>
     </div>
   );
