@@ -43,10 +43,10 @@ export function stripThink(s) {
 
 const DEFAULT_CONFIG = {
   enabled: false,
-  // 默认给国内服务商（DeepSeek），免梯子即可用；老用户已保存的配置不受影响
+  // 默认给国内服务商（DeepSeek V4 Flash），免梯子即可用；老用户已保存的配置不受影响
   provider: 'deepseek',
   apiKey: '',
-  model: 'deepseek-chat',
+  model: 'deepseek-v4-flash',
   baseUrl: '',
   features: {
     voiceTaskInput: true,
@@ -63,79 +63,93 @@ const DEFAULT_CONFIG = {
 
 const PROVIDER_MODELS = {
   openai: [
-    { id: 'gpt-4o-mini', label: 'GPT-4o Mini', recommended: true },
-    { id: 'gpt-4o', label: 'GPT-4o' },
-    { id: 'gpt-4.1-nano', label: 'GPT-4.1 Nano' },
-    { id: 'gpt-4.1-mini', label: 'GPT-4.1 Mini' },
-    { id: 'gpt-4.1', label: 'GPT-4.1' },
+    { id: 'gpt-5.6-terra', label: 'GPT-5.6 Terra（均衡，推荐）', recommended: true },
+    { id: 'gpt-5.6-sol', label: 'GPT-5.6 Sol（旗舰）' },
+    { id: 'gpt-5.6-luna', label: 'GPT-5.6 Luna（快速便宜）' },
+    { id: 'gpt-5.4-mini', label: 'GPT-5.4 Mini' },
+    { id: 'gpt-5.4-nano', label: 'GPT-5.4 Nano' },
   ],
   openrouter: [
-    { id: 'openai/gpt-4o-mini', label: 'GPT-4o Mini', recommended: true },
-    { id: 'openai/gpt-4o', label: 'GPT-4o' },
-    { id: 'anthropic/claude-haiku-4-5', label: 'Claude Haiku 4.5' },
-    { id: 'anthropic/claude-sonnet-4-5', label: 'Claude Sonnet 4.5' },
-    { id: 'google/gemini-2.0-flash', label: 'Gemini 2.0 Flash' },
-    { id: 'meta-llama/llama-3.3-70b-instruct', label: 'Llama 3.3 70B' },
+    { id: 'anthropic/claude-sonnet-5', label: 'Claude Sonnet 5', recommended: true },
+    { id: 'anthropic/claude-opus-5', label: 'Claude Opus 5' },
+    { id: 'openai/gpt-5.6-terra', label: 'GPT-5.6 Terra' },
+    { id: 'google/gemini-3.8-flash', label: 'Gemini 3.8 Flash' },
+    { id: 'deepseek/deepseek-v4-pro', label: 'DeepSeek V4 Pro' },
+    { id: 'z-ai/glm-5.3', label: 'GLM-5.3' },
+    { id: 'moonshotai/kimi-k3', label: 'Kimi K3' },
   ],
   anthropic: [
-    { id: 'claude-haiku-4-5', label: 'Claude Haiku 4.5', recommended: true },
-    { id: 'claude-sonnet-4-5', label: 'Claude Sonnet 4.5' },
+    { id: 'claude-sonnet-5', label: 'Claude Sonnet 5（推荐）', recommended: true },
+    { id: 'claude-opus-5', label: 'Claude Opus 5（旗舰）' },
+    { id: 'claude-haiku-4-5', label: 'Claude Haiku 4.5（最快最省）' },
+    { id: 'claude-fable-5-1', label: 'Claude Fable 5.1（顶配）' },
   ],
   gemini: [
-    { id: 'gemini-2.0-flash', label: 'Gemini 2.0 Flash', recommended: true },
-    { id: 'gemini-2.0-flash-lite', label: 'Gemini 2.0 Flash Lite' },
-    { id: 'gemini-2.5-flash-preview-05-20', label: 'Gemini 2.5 Flash' },
-    { id: 'gemini-2.5-pro-preview-05-06', label: 'Gemini 2.5 Pro' },
+    { id: 'gemini-3.8-flash', label: 'Gemini 3.8 Flash（推荐）', recommended: true },
+    { id: 'gemini-3.7-flash', label: 'Gemini 3.7 Flash' },
+    { id: 'gemini-3.5-flash', label: 'Gemini 3.5 Flash' },
+    { id: 'gemini-3.5-flash-lite', label: 'Gemini 3.5 Flash-Lite' },
+    { id: 'gemini-3.1-pro-preview', label: 'Gemini 3.1 Pro（最强推理）' },
+    { id: 'gemini-2.5-flash', label: 'Gemini 2.5 Flash（旧）' },
   ],
   ollama: [
     { id: 'llama3.2', label: 'Llama 3.2', recommended: true },
+    { id: 'qwen3:8b', label: 'Qwen3 8B' },
+    { id: 'gemma3', label: 'Gemma 3' },
     { id: 'mistral', label: 'Mistral' },
-    { id: 'gemma2', label: 'Gemma 2' },
   ],
   custom: [],
 
   // ===== 国内服务商（全部 OpenAI 兼容协议，直连国内节点）=====
+  // 更新于 2026-09-11：deepseek-chat / deepseek-reasoner 已于 2026-07-24 停用（调用直接报错）
   deepseek: [
-    { id: 'deepseek-chat', label: 'DeepSeek 对话', recommended: true },
-    { id: 'deepseek-reasoner', label: 'DeepSeek 推理' },
+    { id: 'deepseek-v4-flash', label: 'DeepSeek V4 Flash（高速，推荐）', recommended: true },
+    { id: 'deepseek-v4-pro', label: 'DeepSeek V4 Pro（旗舰推理）' },
   ],
   zhipu: [
-    { id: 'glm-4.6', label: 'GLM-4.6', recommended: true },
-    { id: 'glm-4.5', label: 'GLM-4.5' },
-    { id: 'glm-4.5-air', label: 'GLM-4.5-Air' },
-    { id: 'glm-4-flash', label: 'GLM-4-Flash（免费）' },
+    { id: 'glm-5.3', label: 'GLM-5.3（旗舰，推荐）', recommended: true },
+    { id: 'glm-5.3-flash', label: 'GLM-5.3-Flash（快）' },
+    { id: 'glm-5.2', label: 'GLM-5.2（1M 上下文）' },
+    { id: 'glm-4.6', label: 'GLM-4.6（旧）' },
   ],
   qwen: [
-    { id: 'qwen-plus', label: '通义千问 Plus', recommended: true },
-    { id: 'qwen-max', label: '通义千问 Max' },
-    { id: 'qwen-turbo', label: '通义千问 Turbo' },
-    { id: 'qwen-flash', label: '通义千问 Flash' },
+    { id: 'qwen3.8-max', label: '通义千问 3.8 Max（旗舰，推荐）', recommended: true },
+    { id: 'qwen3.7-plus', label: '通义千问 3.7 Plus（均衡）' },
+    { id: 'qwen3.8-flash', label: '通义千问 3.8 Flash（快）' },
+    { id: 'qwen3.7-flash', label: '通义千问 3.7 Flash' },
+    { id: 'qwen-long', label: '通义千问 Long（1000 万上下文）' },
   ],
   moonshot: [
-    { id: 'moonshot-v1-8k', label: 'Kimi 8K', recommended: true },
-    { id: 'moonshot-v1-32k', label: 'Kimi 32K' },
-    { id: 'moonshot-v1-128k', label: 'Kimi 128K' },
+    { id: 'kimi-k3', label: 'Kimi K3（旗舰，推荐）', recommended: true },
+    { id: 'kimi-k2.7', label: 'Kimi K2.7' },
+    { id: 'kimi-k2.6', label: 'Kimi K2.6' },
+    { id: 'moonshot-v1-128k', label: 'Moonshot v1 128K（旧）' },
   ],
   volcengine: [
-    { id: 'doubao-seed-1-6-250615', label: '豆包 Seed 1.6', recommended: true },
-    { id: 'doubao-seed-1-6-flash-250715', label: '豆包 Seed 1.6 Flash' },
+    { id: 'doubao-seed-evolving', label: '豆包 Seed Evolving（自进化，推荐）', recommended: true },
+    { id: 'doubao-seed-2.1-pro', label: '豆包 Seed 2.1 Pro' },
+    { id: 'doubao-seed-2.1-turbo', label: '豆包 Seed 2.1 Turbo' },
+    { id: 'doubao-seed-2.0-code', label: '豆包 Seed 2.0 Code' },
   ],
   siliconflow: [
-    { id: 'Qwen/Qwen2.5-7B-Instruct', label: 'Qwen2.5-7B', recommended: true },
-    { id: 'deepseek-ai/DeepSeek-V3', label: 'DeepSeek-V3' },
-    { id: 'THUDM/glm-4-9b-chat', label: 'GLM-4-9B' },
+    { id: 'deepseek-ai/DeepSeek-V4', label: 'DeepSeek V4', recommended: true },
+    { id: 'zai-org/GLM-5.3', label: 'GLM-5.3' },
+    { id: 'moonshotai/Kimi-K3', label: 'Kimi K3' },
+    { id: 'Qwen/Qwen3.8-32B', label: 'Qwen3.8 32B' },
   ],
   minimax: [
-    { id: 'MiniMax-Text-01', label: 'MiniMax-Text-01', recommended: true },
-    { id: 'MiniMax-M1', label: 'MiniMax-M1' },
+    { id: 'MiniMax-M3', label: 'MiniMax M3（旗舰，推荐）', recommended: true },
+    { id: 'MiniMax-M2.7', label: 'MiniMax M2.7' },
+    { id: 'MiniMax-M2.5', label: 'MiniMax M2.5' },
   ],
   hunyuan: [
-    { id: 'hunyuan-turbo', label: '混元 Turbo', recommended: true },
-    { id: 'hunyuan-t1', label: '混元 T1' },
+    { id: 'hy4-preview', label: '混元 Hy4 Preview（旗舰，推荐）', recommended: true },
+    { id: 'hy3', label: '混元 Hy3（256K）' },
+    { id: 'hunyuan-a13b', label: '混元 A13B（轻量）' },
   ],
   qianfan: [
-    { id: 'ernie-4.0-8k', label: 'ERNIE 4.0', recommended: true },
-    { id: 'ernie-speed-8k', label: 'ERNIE Speed' },
+    { id: 'ernie-5.1', label: '文心 ERNIE 5.1（旗舰，推荐）', recommended: true },
+    { id: 'ernie-5.0', label: '文心 ERNIE 5.0（全模态）' },
   ],
 };
 
@@ -174,12 +188,12 @@ export const PROVIDER_BASE_URLS = {
 // 一键配置用的推荐预设：key = provider，给出申请入口
 export const CN_PRESETS = [
   { provider: 'deepseek',    name: 'DeepSeek',    keyUrl: 'https://platform.deepseek.com/api_keys',             note: '最便宜，中文强，推荐首选' },
-  { provider: 'zhipu',       name: '智谱 GLM',     keyUrl: 'https://open.bigmodel.cn/usercenter/apikeys',        note: 'GLM-4-Flash 免费' },
+  { provider: 'zhipu',       name: '智谱 GLM',     keyUrl: 'https://open.bigmodel.cn/usercenter/apikeys',        note: 'GLM-5.3 旗舰，有免费额度' },
   { provider: 'qwen',        name: '通义千问',      keyUrl: 'https://bailian.console.aliyun.com/?tab=model#/api-key', note: '阿里百炼，稳定' },
   { provider: 'siliconflow', name: '硅基流动',      keyUrl: 'https://cloud.siliconflow.cn/account/ak',            note: '聚合多家开源模型' },
   { provider: 'moonshot',    name: 'Kimi',        keyUrl: 'https://platform.moonshot.cn/console/api-keys',      note: '长上下文' },
   { provider: 'volcengine',  name: '豆包',         keyUrl: 'https://console.volcengine.com/ark',                 note: '模型填接入点 ID' },
-  { provider: 'minimax',     name: 'MiniMax',     keyUrl: 'https://platform.minimaxi.com/',                     note: 'M1 长推理' },
+  { provider: 'minimax',     name: 'MiniMax',     keyUrl: 'https://platform.minimaxi.com/',                     note: 'M3 长上下文' },
   { provider: 'hunyuan',     name: '腾讯混元',      keyUrl: 'https://cloud.tencent.com/product/hunyuan',          note: '腾讯云' },
   { provider: 'qianfan',     name: '文心一言',      keyUrl: 'https://console.bce.baidu.com/qianfan/ais/console/apiKey', note: '百度千帆' },
 ];

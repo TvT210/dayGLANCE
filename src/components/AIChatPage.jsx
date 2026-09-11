@@ -449,10 +449,12 @@ const AIChatPage = () => {
           <div className="flex gap-1 mt-2 flex-wrap">
             {(aiConfig.provider === 'custom' || !aiConfig.provider) && (
               <>
-                <button onClick={() => setSelectedModel('MiniMax-M3')} className="text-[10px] px-2 py-0.5 bg-gray-100 dark:bg-gray-800 rounded">MiniMax-M3</button>
-                <button onClick={() => setSelectedModel('MiniMax-Text-01')} className="text-[10px] px-2 py-0.5 bg-gray-100 dark:bg-gray-800 rounded">MiniMax-Text-01</button>
-                <button onClick={() => setSelectedModel('gpt-4o-mini')} className="text-[10px] px-2 py-0.5 bg-gray-100 dark:bg-gray-800 rounded">gpt-4o-mini</button>
-                <button onClick={() => setSelectedModel('claude-3-5-sonnet')} className="text-[10px] px-2 py-0.5 bg-gray-100 dark:bg-gray-800 rounded">claude-3-5-sonnet</button>
+                <button onClick={() => setSelectedModel('deepseek-v4-flash')} className="text-[10px] px-2 py-0.5 bg-gray-100 dark:bg-gray-800 rounded">deepseek-v4-flash</button>
+                <button onClick={() => setSelectedModel('glm-5.3')} className="text-[10px] px-2 py-0.5 bg-gray-100 dark:bg-gray-800 rounded">glm-5.3</button>
+                <button onClick={() => setSelectedModel('qwen3.8-max')} className="text-[10px] px-2 py-0.5 bg-gray-100 dark:bg-gray-800 rounded">qwen3.8-max</button>
+                <button onClick={() => setSelectedModel('claude-sonnet-5')} className="text-[10px] px-2 py-0.5 bg-gray-100 dark:bg-gray-800 rounded">claude-sonnet-5</button>
+                <button onClick={() => setSelectedModel('gemini-3.8-flash')} className="text-[10px] px-2 py-0.5 bg-gray-100 dark:bg-gray-800 rounded">gemini-3.8-flash</button>
+                <button onClick={() => setSelectedModel('doubao-seed-evolving')} className="text-[10px] px-2 py-0.5 bg-gray-100 dark:bg-gray-800 rounded">doubao-seed-evolving</button>
               </>
             )}
           </div>

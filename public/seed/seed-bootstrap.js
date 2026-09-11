@@ -1,15 +1,17 @@
 // 考研日历 PWA · 首次启动引导脚本
 // 注册 10 个 calendar, 每个学科独立颜色, 全部从同源 PWA 静态资源 fetch
-// 标记 'day-planner-seed-v3' 避免重复触发
+// 标记 'day-planner-seed-v4' 避免重复触发
 //   v2 -> v3: 修正节次时间为广师大白云校区官方作息表
 //   (08:30-09:55 / 10:05-11:30 / 13:30-14:55 / 15:05-16:30 / 18:40-20:50)
+//   v3 -> v4: 修复 ICS 行结构 (END:VEVENT 与 BEGIN:VEVENT 被粘成一行,
+//   导致解析器只识别出 1 个事件、日历全空); 重新注册即可重新拉取修复后的 ICS
 //
 // 必须在 dayglance 主 JS 之前执行 (已通过 index.html head 注入)
 
 (function bootstrapKaoyanSeed() {
   try {
-    var SEED_FLAG = 'day-planner-seed-v3';
-    var PREV_FLAG = 'day-planner-seed-v2';
+    var SEED_FLAG = 'day-planner-seed-v4';
+    var PREV_FLAG = 'day-planner-seed-v3';
     if (localStorage.getItem(SEED_FLAG)) {
       return; // 已经引导过
     }
@@ -26,17 +28,19 @@
     }
 
     // 10 个学科 calendar, 每个独立颜色
+    // URL 带版本号, 绕开 GitHub Pages 的 max-age=600 缓存, 保证刷新即取到最新 ICS
+    var V = '?v=' + SEED_FLAG.replace('day-planner-seed-', '');
     var calendars = [
-      { id: 'kaoyan-math',    url: '/dayGLANCE/seed/math.ics',    name: '考研·数学',          color: 'bg-rose-500' },
-      { id: 'kaoyan-english', url: '/dayGLANCE/seed/english.ics', name: '考研·英语',          color: 'bg-emerald-500' },
-      { id: 'kaoyan-politics',url: '/dayGLANCE/seed/politics.ics',name: '考研·政治',          color: 'bg-red-500' },
-      { id: 'kaoyan-ds',      url: '/dayGLANCE/seed/ds.ics',      name: '408 数据结构',        color: 'bg-indigo-500' },
-      { id: 'kaoyan-cn',      url: '/dayGLANCE/seed/cn.ics',      name: '408 计算机网络',      color: 'bg-sky-500' },
-      { id: 'kaoyan-os',      url: '/dayGLANCE/seed/os.ics',      name: '408 操作系统',        color: 'bg-amber-500' },
-      { id: 'kaoyan-co',      url: '/dayGLANCE/seed/co.ics',      name: '408 计算机组成原理',  color: 'bg-fuchsia-500' },
-      { id: 'kaoyan-mock',    url: '/dayGLANCE/seed/mock.ics',    name: '考研·模考',          color: 'bg-purple-500' },
-      { id: 'kaoyan-cet6',    url: '/dayGLANCE/seed/cet6.ics',    name: 'CET-6 专项',          color: 'bg-lime-500' },
-      { id: 'kaoyan-life',    url: '/dayGLANCE/seed/life.ics',    name: '生活/课内/通勤',      color: 'bg-stone-500' },
+      { id: 'kaoyan-math',    url: '/dayGLANCE/seed/math.ics'    + V, name: '考研·数学',          color: 'bg-rose-500' },
+      { id: 'kaoyan-english', url: '/dayGLANCE/seed/english.ics' + V, name: '考研·英语',          color: 'bg-emerald-500' },
+      { id: 'kaoyan-politics',url: '/dayGLANCE/seed/politics.ics'+ V, name: '考研·政治',          color: 'bg-red-500' },
+      { id: 'kaoyan-ds',      url: '/dayGLANCE/seed/ds.ics'      + V, name: '408 数据结构',        color: 'bg-indigo-500' },
+      { id: 'kaoyan-cn',      url: '/dayGLANCE/seed/cn.ics'      + V, name: '408 计算机网络',      color: 'bg-sky-500' },
+      { id: 'kaoyan-os',      url: '/dayGLANCE/seed/os.ics'      + V, name: '408 操作系统',        color: 'bg-amber-500' },
+      { id: 'kaoyan-co',      url: '/dayGLANCE/seed/co.ics'      + V, name: '408 计算机组成原理',  color: 'bg-fuchsia-500' },
+      { id: 'kaoyan-mock',    url: '/dayGLANCE/seed/mock.ics'    + V, name: '考研·模考',          color: 'bg-purple-500' },
+      { id: 'kaoyan-cet6',    url: '/dayGLANCE/seed/cet6.ics'    + V, name: 'CET-6 专项',          color: 'bg-lime-500' },
+      { id: 'kaoyan-life',    url: '/dayGLANCE/seed/life.ics'    + V, name: '生活/课内/通勤',      color: 'bg-stone-500' },
     ];
 
     // dayglance 期望的字段: id, name, url, color, enabled
@@ -49,7 +53,7 @@
     localStorage.setItem('day-planner-sync-retention-days', '600');
     // 主 taskCalendarUrl 留空, 我们走 icsCalendars 多源模式
     localStorage.setItem('day-planner-task-calendar-url', '');
-    localStorage.setItem(SEED_FLAG, 'v3-imported');
+    localStorage.setItem(SEED_FLAG, 'v4-imported');
   } catch (e) {
     console.warn('[kaoyan-seed] bootstrap skipped:', e);
   }
