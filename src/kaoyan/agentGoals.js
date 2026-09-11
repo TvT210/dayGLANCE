@@ -10,8 +10,9 @@
 // 打在自建对象上的标记，用于幂等重建（换设备/清数据后能重新生成，且不会重复）
 export const KAOYAN_MARK = 'kaoyan-agent';
 
-// 2027 考研初试：2026-12-19（12 月倒数第 2 周的周六）
-export const EXAM_DATE = '2026-12-19';
+// 2027 考研初试：2027-12-25（周六）/ 12-26（周日），12 月倒数第 2 个周末
+// 修正记录：原值 '2026-12-19' 早了一年（2026-09-11 发现并修正）
+export const EXAM_DATE = '2027-12-25';
 
 // 6 个 agent 的目标定义。key 必须与 src/ai.js 的 AGENTS 对齐。
 export const KAOYAN_AGENT_GOALS = {
@@ -34,8 +35,8 @@ export const KAOYAN_AGENT_GOALS = {
     targetDate: EXAM_DATE,
   },
   cs: {
-    title: '408 专业课 120+',
-    description: '王道四科单科书 + 课后题；408 真题 2010-2024 三刷；选择 / 大题分开练。',
+    title: '专业课 120+（方向待定）',
+    description: '方向未定：网安 / CS(408 统考) / 物联网 / 机器人。2026-11 底锁定 1 主 1 备，2027-03 正式启动。若走 408：王道四科单科书 + 课后题 + 真题 2010-2024 三刷，选择 / 大题分开练。',
     color: 'bg-amber-500',
     targetDate: EXAM_DATE,
   },
@@ -62,10 +63,10 @@ export const KAOYAN_DAILY_TASKS = {
     { title: '错题回顾 10 道', duration: 30 },
   ],
   english: [
-    { title: '词汇 5500 40 词（新词 20 + 复习 20）', duration: 30 },
-    { title: '长难句 1 篇（分析 + 翻译）', duration: 30 },
-    { title: '阅读真题 1 篇 + 精读', duration: 45 },
-    { title: '听力 30 min', duration: 30 },
+    { title: '词汇 90 词（新词 45 + 复习 45）', duration: 45 },
+    { title: '长难句 5 句（拆主干 + 翻译）', duration: 20 },
+    { title: '阅读真题 1 篇 + 精读', duration: 60 },
+    { title: '睡前复习当日生词', duration: 10 },
   ],
   politics: [
     { title: '徐涛视频 30 min', duration: 30 },

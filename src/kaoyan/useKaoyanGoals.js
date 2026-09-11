@@ -22,7 +22,7 @@ const uid = () =>
 
 export function useKaoyanGoals() {
   const ctx = useDayPlannerCtx() || {};
-  const { goals = [], projects = [], tasks = [], addGoal, addProject, setTasks } = ctx;
+  const { goals = [], projects = [], tasks = [], addGoal, addProject, updateGoal, setTasks } = ctx;
 
   const findGoal = useCallback(
     (key) => goals.find(g => g?.[KAOYAN_MARK] === key) || null,
@@ -34,19 +34,31 @@ export function useKaoyanGoals() {
   );
 
   // 幂等：已存在就返回，缺失才创建。每个 agent = 1 个 Goal + 1 个「每日任务」Project
+  // 另做「定义同步」：agentGoals.js 是唯一事实来源，改了标题/描述/截止日期要能传导到已建目标，
+  // 否则修正 EXAM_DATE 之类的改动对老设备无效。
   const ensureGoal = useCallback((key) => {
-    if (!buildGoalFields(key)) return null;
+    const fields = buildGoalFields(key);
+    if (!fields) return null;
     let goal = goals.find(g => g?.[KAOYAN_MARK] === key) || null;
     if (!goal && typeof addGoal === 'function') {
-      goal = addGoal(buildGoalFields(key));
+      goal = addGoal(fields);
     }
     if (!goal) return null;
+
+    if (typeof updateGoal === 'function') {
+      const drift = {};
+      for (const k of ['title', 'description', 'targetDate', 'color']) {
+        if (fields[k] != null && goal[k] !== fields[k]) drift[k] = fields[k];
+      }
+      if (Object.keys(drift).length > 0) updateGoal(goal.id, drift);
+    }
+
     let project = projects.find(p => p?.[KAOYAN_MARK] === key) || null;
     if (!project && typeof addProject === 'function') {
       project = addProject(buildProjectFields(key, goal.id));
     }
     return { goal, project: project || null };
-  }, [goals, projects, addGoal, addProject]);
+  }, [goals, projects, addGoal, addProject, updateGoal]);
 
   const ensureAll = useCallback(() => {
     let created = 0;
