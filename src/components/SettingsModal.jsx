@@ -10,7 +10,7 @@ import ICloudDiagnostics from './ICloudDiagnostics.jsx';
 import CalendarList from './CalendarList.jsx';
 import ICloudSyncToggle from './ICloudSyncToggle.jsx';
 import { cloudSyncProviders } from '../utils/cloudSyncProviders.js';
-import { testConnection, PROVIDER_MODELS, PROVIDER_LABELS } from '../ai.js';
+import { testConnection, PROVIDER_MODELS, PROVIDER_LABELS, CN_PRESETS, PROVIDER_BASE_URLS, defaultModelFor, isDomesticProvider } from '../ai.js';
 import { isNativeAndroid, isNativeApp, nativePickVault, nativeGetCalendars, nativeGetAutomationIntentsEnabled, nativeSetAutomationIntentsEnabled } from '../native.js';
 import { hasNativeCalendar, electronCalendarAvailable, electronGetCalendars } from '../utils/nativeCalendar.js';
 import { isFileSystemAccessSupported, requestVaultAccess, disconnectVault, formatDatePattern } from '../obsidian.js';
@@ -1373,6 +1373,54 @@ const SettingsModal = () => {
                             </select>
                           </div>
 
+                          {/* 国内 AI 一键配置 */}
+                          <div>
+                            <label className={`block text-sm ${textSecondary} mb-1.5`}>国内 AI 快速配置（点击即填好接口地址）</label>
+                            <div className="flex flex-wrap gap-1.5">
+                              {CN_PRESETS.map(p => {
+                                const active = aiConfig.provider === p.provider;
+                                return (
+                                  <button
+                                    key={p.provider}
+                                    type="button"
+                                    title={p.note}
+                                    onClick={() => {
+                                      setAiConfig(prev => ({
+                                        ...prev,
+                                        enabled: true,
+                                        provider: p.provider,
+                                        model: defaultModelFor(p.provider),
+                                        baseUrl: '',
+                                      }));
+                                      setAiConnectionStatus(null);
+                                      setAiOllamaHelp(null);
+                                    }}
+                                    className={`px-2 py-1 rounded-md border text-xs transition-colors ${
+                                      active
+                                        ? 'bg-purple-600 text-white border-purple-600'
+                                        : `${borderClass} ${textSecondary} hover:border-purple-400`
+                                    }`}
+                                  >
+                                    {p.name}
+                                  </button>
+                                );
+                              })}
+                            </div>
+                            {isDomesticProvider(aiConfig.provider) && (
+                              <p className={`text-xs ${textSecondary} mt-1.5`}>
+                                {CN_PRESETS.find(p => p.provider === aiConfig.provider)?.note} ·{' '}
+                                <a
+                                  href={CN_PRESETS.find(p => p.provider === aiConfig.provider)?.keyUrl}
+                                  target="_blank"
+                                  rel="noopener noreferrer"
+                                  className="text-purple-500 underline"
+                                >
+                                  去申请 API Key
+                                </a>
+                              </p>
+                            )}
+                          </div>
+
                           {/* API Key */}
                           {aiConfig.provider !== 'ollama' && (
                             <div>
@@ -1395,8 +1443,8 @@ const SettingsModal = () => {
                             </div>
                           )}
 
-                          {/* Base URL for Ollama/Custom */}
-                          {(aiConfig.provider === 'ollama' || aiConfig.provider === 'custom') && (
+                          {/* Base URL for Ollama/Custom/国内 */}
+                          {(aiConfig.provider === 'ollama' || aiConfig.provider === 'custom' || isDomesticProvider(aiConfig.provider)) && (
                             <div>
                               <label className={`block text-sm ${textSecondary} mb-1`}>
                                 <Server size={12} className="inline mr-1" />
@@ -1406,7 +1454,11 @@ const SettingsModal = () => {
                               </label>
                               <input
                                 type="url"
-                                placeholder={aiConfig.provider === 'ollama' ? 'http://localhost:11434' : 'https://your-endpoint.com/v1'}
+                                placeholder={
+                                  aiConfig.provider === 'ollama'
+                                    ? 'http://localhost:11434'
+                                    : PROVIDER_BASE_URLS[aiConfig.provider] || 'https://your-endpoint.com/v1'
+                                }
                                 value={aiConfig.baseUrl}
                                 onChange={(e) => setAiConfig(prev => ({ ...prev, baseUrl: e.target.value }))}
                                 className={`w-full px-3 py-2 border ${borderClass} rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500 ${darkMode ? 'bg-gray-700 text-white' : 'bg-white text-stone-900'} text-sm`}

@@ -43,9 +43,10 @@ export function stripThink(s) {
 
 const DEFAULT_CONFIG = {
   enabled: false,
-  provider: 'openai',
+  // 默认给国内服务商（DeepSeek），免梯子即可用；老用户已保存的配置不受影响
+  provider: 'deepseek',
   apiKey: '',
-  model: 'gpt-4o-mini',
+  model: 'deepseek-chat',
   baseUrl: '',
   features: {
     voiceTaskInput: true,
@@ -92,6 +93,50 @@ const PROVIDER_MODELS = {
     { id: 'gemma2', label: 'Gemma 2' },
   ],
   custom: [],
+
+  // ===== 国内服务商（全部 OpenAI 兼容协议，直连国内节点）=====
+  deepseek: [
+    { id: 'deepseek-chat', label: 'DeepSeek 对话', recommended: true },
+    { id: 'deepseek-reasoner', label: 'DeepSeek 推理' },
+  ],
+  zhipu: [
+    { id: 'glm-4.6', label: 'GLM-4.6', recommended: true },
+    { id: 'glm-4.5', label: 'GLM-4.5' },
+    { id: 'glm-4.5-air', label: 'GLM-4.5-Air' },
+    { id: 'glm-4-flash', label: 'GLM-4-Flash（免费）' },
+  ],
+  qwen: [
+    { id: 'qwen-plus', label: '通义千问 Plus', recommended: true },
+    { id: 'qwen-max', label: '通义千问 Max' },
+    { id: 'qwen-turbo', label: '通义千问 Turbo' },
+    { id: 'qwen-flash', label: '通义千问 Flash' },
+  ],
+  moonshot: [
+    { id: 'moonshot-v1-8k', label: 'Kimi 8K', recommended: true },
+    { id: 'moonshot-v1-32k', label: 'Kimi 32K' },
+    { id: 'moonshot-v1-128k', label: 'Kimi 128K' },
+  ],
+  volcengine: [
+    { id: 'doubao-seed-1-6-250615', label: '豆包 Seed 1.6', recommended: true },
+    { id: 'doubao-seed-1-6-flash-250715', label: '豆包 Seed 1.6 Flash' },
+  ],
+  siliconflow: [
+    { id: 'Qwen/Qwen2.5-7B-Instruct', label: 'Qwen2.5-7B', recommended: true },
+    { id: 'deepseek-ai/DeepSeek-V3', label: 'DeepSeek-V3' },
+    { id: 'THUDM/glm-4-9b-chat', label: 'GLM-4-9B' },
+  ],
+  minimax: [
+    { id: 'MiniMax-Text-01', label: 'MiniMax-Text-01', recommended: true },
+    { id: 'MiniMax-M1', label: 'MiniMax-M1' },
+  ],
+  hunyuan: [
+    { id: 'hunyuan-turbo', label: '混元 Turbo', recommended: true },
+    { id: 'hunyuan-t1', label: '混元 T1' },
+  ],
+  qianfan: [
+    { id: 'ernie-4.0-8k', label: 'ERNIE 4.0', recommended: true },
+    { id: 'ernie-speed-8k', label: 'ERNIE Speed' },
+  ],
 };
 
 const PROVIDER_LABELS = {
@@ -101,7 +146,65 @@ const PROVIDER_LABELS = {
   gemini: 'Google Gemini',
   ollama: 'Ollama (Local)',
   custom: 'Custom (OpenAI-compatible)',
+  // 国内
+  deepseek: '🇨🇳 DeepSeek 深度求索',
+  zhipu: '🇨🇳 智谱 GLM',
+  qwen: '🇨🇳 通义千问（阿里百炼）',
+  moonshot: '🇨🇳 Kimi（月之暗面）',
+  volcengine: '🇨🇳 豆包（火山方舟）',
+  siliconflow: '🇨🇳 硅基流动 SiliconFlow',
+  minimax: '🇨🇳 MiniMax',
+  hunyuan: '🇨🇳 腾讯混元',
+  qianfan: '🇨🇳 文心一言（百度千帆）',
 };
+
+// 国内服务商固定 Base URL（OpenAI 兼容），选中后自动填充，用户一般不用改
+export const PROVIDER_BASE_URLS = {
+  deepseek: 'https://api.deepseek.com/v1',
+  zhipu: 'https://open.bigmodel.cn/api/paas/v4',
+  qwen: 'https://dashscope.aliyuncs.com/compatible-mode/v1',
+  moonshot: 'https://api.moonshot.cn/v1',
+  volcengine: 'https://ark.cn-beijing.volces.com/api/v3',
+  siliconflow: 'https://api.siliconflow.cn/v1',
+  minimax: 'https://api.minimaxi.com/v1',
+  hunyuan: 'https://api.hunyuan.cloud.tencent.com/v1',
+  qianfan: 'https://qianfan.baidubce.com/v2',
+};
+
+// 一键配置用的推荐预设：key = provider，给出申请入口
+export const CN_PRESETS = [
+  { provider: 'deepseek',    name: 'DeepSeek',    keyUrl: 'https://platform.deepseek.com/api_keys',             note: '最便宜，中文强，推荐首选' },
+  { provider: 'zhipu',       name: '智谱 GLM',     keyUrl: 'https://open.bigmodel.cn/usercenter/apikeys',        note: 'GLM-4-Flash 免费' },
+  { provider: 'qwen',        name: '通义千问',      keyUrl: 'https://bailian.console.aliyun.com/?tab=model#/api-key', note: '阿里百炼，稳定' },
+  { provider: 'siliconflow', name: '硅基流动',      keyUrl: 'https://cloud.siliconflow.cn/account/ak',            note: '聚合多家开源模型' },
+  { provider: 'moonshot',    name: 'Kimi',        keyUrl: 'https://platform.moonshot.cn/console/api-keys',      note: '长上下文' },
+  { provider: 'volcengine',  name: '豆包',         keyUrl: 'https://console.volcengine.com/ark',                 note: '模型填接入点 ID' },
+  { provider: 'minimax',     name: 'MiniMax',     keyUrl: 'https://platform.minimaxi.com/',                     note: 'M1 长推理' },
+  { provider: 'hunyuan',     name: '腾讯混元',      keyUrl: 'https://cloud.tencent.com/product/hunyuan',          note: '腾讯云' },
+  { provider: 'qianfan',     name: '文心一言',      keyUrl: 'https://console.bce.baidu.com/qianfan/ais/console/apiKey', note: '百度千帆' },
+];
+
+// 走 OpenAI 兼容 /chat/completions 的 provider
+export const OPENAI_COMPAT_PROVIDERS = [
+  'openai', 'openrouter', 'custom',
+  'deepseek', 'zhipu', 'qwen', 'moonshot', 'volcengine',
+  'siliconflow', 'minimax', 'hunyuan', 'qianfan',
+];
+
+export function isOpenAICompat(provider) {
+  return OPENAI_COMPAT_PROVIDERS.includes(provider);
+}
+
+// 国内服务商（有预设 Base URL 的都算）
+export function isDomesticProvider(provider) {
+  return !!PROVIDER_BASE_URLS[provider];
+}
+
+// 取某个 provider 的默认模型（标了 recommended 的那个）
+export function defaultModelFor(provider) {
+  const list = PROVIDER_MODELS[provider] || [];
+  return (list.find(m => m.recommended) || list[0])?.id || '';
+}
 
 // Load config from localStorage
 export function loadAIConfig() {
@@ -136,6 +239,10 @@ function getBaseUrl(config) {
     case 'custom':
       return config.baseUrl || '';
     default:
+      // 国内服务商：预设地址优先，允许用户在 Base URL 里覆盖
+      if (PROVIDER_BASE_URLS[config.provider]) {
+        return config.baseUrl || PROVIDER_BASE_URLS[config.provider];
+      }
       return '';
   }
 }
@@ -185,10 +292,8 @@ async function _aiComplete(systemPrompt, userMessage, config) {
 async function _aiCompleteMessages(messages, config) {
   const { provider, apiKey, model } = config;
 
-  switch (provider) {
-    case 'openai':
-    case 'openrouter':
-    case 'custom': {
+  // OpenAI 兼容协议统一走这里：openai / openrouter / custom + 全部国内服务商
+  if (isOpenAICompat(provider)) {
       const base = provider === 'custom' ? (config.baseUrl || '') : getBaseUrl(config);
       const headers = {
         'Content-Type': 'application/json',
@@ -213,8 +318,9 @@ async function _aiCompleteMessages(messages, config) {
       const content = data.choices?.[0]?.message?.content;
       if (content == null) throw new Error(`Unexpected response format from ${PROVIDER_LABELS[provider] || provider} API`);
       return stripThink(content);
-    }
+  }
 
+  switch (provider) {
     case 'anthropic': {
       const res = await fetch('https://api.anthropic.com/v1/messages', {
         method: 'POST',
@@ -472,7 +578,7 @@ export async function aiChat({ messages, config, model, signal, onDelta, maxToke
     if (clean && typeof onDelta === 'function') onDelta(clean);
   };
 
-  const canStream = ['openai', 'openrouter', 'custom'].includes(provider);
+  const canStream = isOpenAICompat(provider);
   if (!canStream || typeof onDelta !== 'function') {
     const full = await withRetry(() => _aiCompleteMessages(messages, { ...cfg, model: modelId }));
     emit(full);
